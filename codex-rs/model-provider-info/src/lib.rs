@@ -317,6 +317,7 @@ pub const LMSTUDIO_OSS_PROVIDER_ID: &str = "lmstudio";
 pub const OLLAMA_OSS_PROVIDER_ID: &str = "ollama";
 pub const DEEPSEEK_PROVIDER_ID: &str = "deepseek";
 pub const QWEN_PROVIDER_ID: &str = "qwen";
+pub const MINIMAX_PROVIDER_ID: &str = "minimax";
 
 /// Built-in default provider list.
 pub fn built_in_model_providers(
@@ -366,6 +367,14 @@ pub fn built_in_model_providers(
                 requires_openai_auth: false,
                 supports_websockets: false,
             },
+        ),
+        (
+            MINIMAX_PROVIDER_ID,
+            create_chat_provider(
+                "MiniMax",
+                "https://api.minimaxi.com/v1",
+                "MINIMAX_API_KEY",
+            ),
         ),
     ]
     .into_iter()

@@ -63,6 +63,7 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         s if s.starts_with("deepseek-reasoner") => (128_000, true),
         s if s.starts_with("deepseek") => (128_000, false),
         s if s.starts_with("qwen") => (1_000_000, false),
+        s if s.starts_with("MiniMax") || s.starts_with("minimax") => (204_800, false),
         _ => (272_000, false),
     };
     ModelInfo {

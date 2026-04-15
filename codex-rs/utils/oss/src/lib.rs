@@ -3,6 +3,7 @@
 use codex_core::config::Config;
 use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
+use codex_model_provider_info::MINIMAX_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
 use codex_model_provider_info::QWEN_PROVIDER_ID;
 
@@ -13,6 +14,7 @@ pub fn get_default_model_for_oss_provider(provider_id: &str) -> Option<&'static 
         OLLAMA_OSS_PROVIDER_ID => Some(codex_ollama::DEFAULT_OSS_MODEL),
         DEEPSEEK_PROVIDER_ID => Some("deepseek-chat"),
         QWEN_PROVIDER_ID => Some("qwen3.6-plus"),
+        MINIMAX_PROVIDER_ID => Some("MiniMax-M2.7"),
         _ => None,
     }
 }

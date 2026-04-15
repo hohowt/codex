@@ -1836,6 +1836,7 @@ impl Config {
             match model_provider_id.as_str() {
                 "deepseek" => Some("deepseek-chat".to_string()),
                 "qwen" => Some("qwen3.6-plus".to_string()),
+                "minimax" => Some("MiniMax-M2.7".to_string()),
                 _ => None,
             }
         });
