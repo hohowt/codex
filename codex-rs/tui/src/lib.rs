@@ -112,6 +112,7 @@ mod color;
 pub(crate) mod custom_terminal;
 pub use custom_terminal::Terminal;
 mod cwd_prompt;
+mod webrtc_stub;
 mod debug_config;
 mod diff_render;
 mod exec_cell;
