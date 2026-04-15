@@ -1478,7 +1478,40 @@ impl ModelClientSession {
                 )
                 .await
             }
+            WireApi::Chat => {
+                self.stream_chat_completions_api(prompt, model_info, session_telemetry).await
+            }
         }
+    }
+
+    /// Streams a turn via the Chat Completions API (for providers like DeepSeek, Qwen).
+    async fn stream_chat_completions_api(
+        &self,
+        prompt: &Prompt,
+        model_info: &ModelInfo,
+        session_telemetry: &SessionTelemetry,
+    ) -> Result<ResponseStream> {
+        let client_setup = self.client.current_client_setup().await?;
+        let transport = ReqwestTransport::new(build_reqwest_client());
+        let tools = codex_tools::create_tools_json_for_responses_api(&prompt.tools)?;
+        let input = prompt.get_formatted_input();
+
+        let api_stream = codex_chat_completions::stream_chat_completions(
+            transport,
+            client_setup.api_provider,
+            &client_setup.api_auth,
+            &model_info.slug,
+            &prompt.base_instructions.text,
+            &input,
+            &tools,
+            prompt.parallel_tool_calls,
+            self.client.state.provider.stream_idle_timeout(),
+        )
+        .await
+        .map_err(map_api_error)?;
+
+        let (stream, _) = map_response_stream(api_stream, session_telemetry.clone());
+        Ok(stream)
     }
 
     /// Permanently disables WebSockets for this Codex session and resets WebSocket state.
