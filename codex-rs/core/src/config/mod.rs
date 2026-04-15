@@ -1718,8 +1718,9 @@ impl Config {
 
         let mut model_providers = built_in_model_providers(openai_base_url);
         // Merge user-defined providers into the built-in list.
+        // User config overrides built-in providers with the same key.
         for (key, provider) in cfg.model_providers.into_iter() {
-            model_providers.entry(key).or_insert(provider);
+            model_providers.insert(key, provider);
         }
 
         let model_provider_id = model_provider
