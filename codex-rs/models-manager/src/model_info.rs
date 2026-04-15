@@ -59,12 +59,12 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
 /// Build a minimal fallback model descriptor for missing/unknown slugs.
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     warn!("Unknown model {slug} is used. This will use fallback model metadata.");
-    let (context_window, supports_reasoning_summaries) = match slug {
-        s if s.starts_with("deepseek-reasoner") => (128_000, true),
-        s if s.starts_with("deepseek") => (128_000, false),
-        s if s.starts_with("qwen") => (1_000_000, false),
-        s if s.starts_with("MiniMax") || s.starts_with("minimax") => (204_800, false),
-        _ => (272_000, false),
+    let (context_window, supports_reasoning_summaries, auto_compact_limit) = match slug {
+        s if s.starts_with("deepseek-reasoner") => (128_000, true, Some(100_000)),
+        s if s.starts_with("deepseek") => (128_000, false, Some(100_000)),
+        s if s.starts_with("qwen") => (1_000_000, false, Some(800_000)),
+        s if s.starts_with("MiniMax") || s.starts_with("minimax") => (204_800, false, Some(160_000)),
+        _ => (272_000, false, None),
     };
     ModelInfo {
         slug: slug.to_string(),
@@ -91,7 +91,7 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         supports_parallel_tool_calls: false,
         supports_image_detail_original: false,
         context_window: Some(context_window),
-        auto_compact_token_limit: None,
+        auto_compact_token_limit: auto_compact_limit,
         effective_context_window_percent: 95,
         experimental_supported_tools: Vec::new(),
         input_modalities: default_input_modalities(),
