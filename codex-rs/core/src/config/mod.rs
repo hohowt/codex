@@ -1725,7 +1725,7 @@ impl Config {
         let model_provider_id = model_provider
             .or(config_profile.model_provider)
             .or(cfg.model_provider)
-            .unwrap_or_else(|| "openai".to_string());
+            .unwrap_or_else(|| "deepseek".to_string());
         let model_provider = model_providers
             .get(&model_provider_id)
             .ok_or_else(|| {
@@ -1829,7 +1829,15 @@ impl Config {
 
         let forced_login_method = cfg.forced_login_method;
 
-        let model = model.or(config_profile.model).or(cfg.model);
+        let model = model.or(config_profile.model).or(cfg.model).or_else(|| {
+            // For non-OpenAI providers, supply a sensible default model so the
+            // user doesn't have to specify one explicitly.
+            match model_provider_id.as_str() {
+                "deepseek" => Some("deepseek-chat".to_string()),
+                "qwen" => Some("qwen3.6-plus".to_string()),
+                _ => None,
+            }
+        });
         let service_tier = service_tier_override
             .unwrap_or_else(|| config_profile.service_tier.or(cfg.service_tier));
         let service_tier = match service_tier {

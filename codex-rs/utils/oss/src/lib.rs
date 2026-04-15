@@ -1,14 +1,18 @@
 //! OSS provider utilities shared between TUI and exec.
 
 use codex_core::config::Config;
+use codex_model_provider_info::DEEPSEEK_PROVIDER_ID;
 use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
 use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
+use codex_model_provider_info::QWEN_PROVIDER_ID;
 
 /// Returns the default model for a given OSS provider.
 pub fn get_default_model_for_oss_provider(provider_id: &str) -> Option<&'static str> {
     match provider_id {
         LMSTUDIO_OSS_PROVIDER_ID => Some(codex_lmstudio::DEFAULT_OSS_MODEL),
         OLLAMA_OSS_PROVIDER_ID => Some(codex_ollama::DEFAULT_OSS_MODEL),
+        DEEPSEEK_PROVIDER_ID => Some("deepseek-chat"),
+        QWEN_PROVIDER_ID => Some("qwen3.6-plus"),
         _ => None,
     }
 }
