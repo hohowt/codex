@@ -148,14 +148,14 @@ jobs:
       - name: Cargo build
         shell: bash
         run: |
-          cargo build --target ${{ matrix.target }} --release --bin codex
+          cargo build --target ${{ matrix.target }} --release --bin codex-moon
 
       - name: Stage artifacts
         shell: bash
         run: |
           dest="dist/${{ matrix.target }}"
           mkdir -p "$dest"
-          cp target/${{ matrix.target }}/release/codex "$dest/codex-${{ matrix.target }}"
+          cp target/${{ matrix.target }}/release/codex-moon "$dest/codex-moon-${{ matrix.target }}"
 
       - name: Compress artifacts
         shell: bash
@@ -196,22 +196,22 @@ jobs:
       - name: Cargo build
         shell: bash
         run: |
-          cargo build --target x86_64-pc-windows-msvc --release --bin codex
+          cargo build --target x86_64-pc-windows-msvc --release --bin codex-moon
 
       - name: Stage artifacts
         shell: bash
         run: |
           dest="dist/x86_64-pc-windows-msvc"
           mkdir -p "$dest"
-          cp target/x86_64-pc-windows-msvc/release/codex.exe "$dest/codex-x86_64-pc-windows-msvc.exe"
+          cp target/x86_64-pc-windows-msvc/release/codex-moon.exe "$dest/codex-moon-x86_64-pc-windows-msvc.exe"
 
       - name: Compress artifacts
         shell: bash
         run: |
           dest="dist/x86_64-pc-windows-msvc"
           cd "$dest"
-          7z a "codex-x86_64-pc-windows-msvc.exe.zip" "codex-x86_64-pc-windows-msvc.exe"
-          rm "codex-x86_64-pc-windows-msvc.exe"
+          7z a "codex-moon-x86_64-pc-windows-msvc.exe.zip" "codex-moon-x86_64-pc-windows-msvc.exe"
+          rm "codex-moon-x86_64-pc-windows-msvc.exe"
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
