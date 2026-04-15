@@ -138,6 +138,12 @@ struct ChunkUsage {
     prompt_tokens: Option<i64>,
     completion_tokens: Option<i64>,
     total_tokens: Option<i64>,
+    prompt_tokens_details: Option<ChunkPromptTokensDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ChunkPromptTokensDetails {
+    cached_tokens: Option<i64>,
 }
 
 /// Accumulated state for a single tool call being streamed.
@@ -192,7 +198,10 @@ async fn process_chat_sse(
                 if let Some(usage) = chunk.usage {
                     final_usage = Some(TokenUsage {
                         input_tokens: usage.prompt_tokens.unwrap_or(0),
-                        cached_input_tokens: 0,
+                        cached_input_tokens: usage
+                            .prompt_tokens_details
+                            .and_then(|d| d.cached_tokens)
+                            .unwrap_or(0),
                         output_tokens: usage.completion_tokens.unwrap_or(0),
                         reasoning_output_tokens: 0,
                         total_tokens: usage.total_tokens.unwrap_or(0),
