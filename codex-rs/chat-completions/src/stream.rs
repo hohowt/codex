@@ -34,7 +34,7 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     parallel_tool_calls: bool,
     idle_timeout: Duration,
 ) -> Result<ResponseStream, ApiError> {
-    let body = build_chat_request(model, instructions, input, tools, parallel_tool_calls, true);
+    let body = build_chat_request(model, instructions, input, tools, parallel_tool_calls);
 
     let url = provider.url_for_path("chat/completions");
     let mut headers = provider.headers.clone();
