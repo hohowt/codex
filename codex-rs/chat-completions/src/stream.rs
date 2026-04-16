@@ -34,7 +34,9 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     parallel_tool_calls: bool,
     idle_timeout: Duration,
 ) -> Result<ResponseStream, ApiError> {
-    let body = build_chat_request(model, instructions, input, tools, parallel_tool_calls);
+    // MiniMax does not support stream_options; DeepSeek and other OpenAI-compatible providers do.
+    let supports_stream_options = !provider.name.eq_ignore_ascii_case("MiniMax");
+    let body = build_chat_request(model, instructions, input, tools, parallel_tool_calls, supports_stream_options);
 
     let url = provider.url_for_path("chat/completions");
     let mut headers = provider.headers.clone();

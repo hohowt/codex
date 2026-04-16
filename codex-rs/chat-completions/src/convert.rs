@@ -13,6 +13,7 @@ pub fn build_chat_request(
     input: &[ResponseItem],
     tools: &[Value],
     parallel_tool_calls: bool,
+    supports_stream_options: bool,
 ) -> Value {
     let mut messages: Vec<Value> = Vec::new();
 
@@ -158,6 +159,10 @@ pub fn build_chat_request(
         body["tools"] = Value::Array(chat_tools);
         body["tool_choice"] = json!("auto");
         body["parallel_tool_calls"] = json!(parallel_tool_calls);
+    }
+
+    if supports_stream_options {
+        body["stream_options"] = json!({"include_usage": true});
     }
 
     body
