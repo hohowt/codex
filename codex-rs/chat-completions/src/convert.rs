@@ -32,15 +32,21 @@ pub fn build_chat_request(
                 role, content, ..
             } => {
                 let text = content_items_to_text(content);
-                if role == "assistant" {
+                // Map OpenAI-specific roles to standard Chat Completions roles.
+                // "developer" is an OpenAI-only role; most providers only accept
+                // "system", "user", "assistant".
+                let mapped_role = match role.as_str() {
+                    "developer" => "system",
+                    other => other,
+                };
+                if mapped_role == "assistant" {
                     messages.push(json!({
                         "role": "assistant",
                         "content": text,
                     }));
                 } else {
-                    // user or developer
                     messages.push(json!({
-                        "role": role,
+                        "role": mapped_role,
                         "content": text,
                     }));
                 }
