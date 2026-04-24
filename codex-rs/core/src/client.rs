@@ -1479,7 +1479,8 @@ impl ModelClientSession {
                 .await
             }
             WireApi::Chat => {
-                self.stream_chat_completions_api(prompt, model_info, session_telemetry).await
+                self.stream_chat_completions_api(prompt, model_info, session_telemetry, effort, summary)
+                    .await
             }
         }
     }
@@ -1490,11 +1491,27 @@ impl ModelClientSession {
         prompt: &Prompt,
         model_info: &ModelInfo,
         session_telemetry: &SessionTelemetry,
+        effort: Option<ReasoningEffortConfig>,
+        _summary: ReasoningSummaryConfig,
     ) -> Result<ResponseStream> {
         let client_setup = self.client.current_client_setup().await?;
         let transport = ReqwestTransport::new(build_reqwest_client());
         let tools = codex_tools::create_tools_json_for_responses_api(&prompt.tools)?;
         let input = prompt.get_formatted_input();
+
+        // Map Responses API reasoning to DeepSeek V4 thinking/reasoning_effort.
+        // DeepSeek V4 supports: "high" (default for normal requests) and "max" (for Agent tasks).
+        // OpenAI efforts "low"/"medium" → "high", "xhigh" → "max".
+        let reasoning_effort = if model_info.supports_reasoning_summaries {
+            let effort = effort.or(model_info.default_reasoning_level);
+            match effort {
+                Some(ReasoningEffortConfig::XHigh) => Some("max".to_string()),
+                Some(_) => Some("high".to_string()),
+                None => Some("max".to_string()),
+            }
+        } else {
+            None
+        };
 
         let api_stream = codex_chat_completions::stream_chat_completions(
             transport,
@@ -1506,6 +1523,7 @@ impl ModelClientSession {
             &tools,
             prompt.parallel_tool_calls,
             self.client.state.provider.stream_idle_timeout(),
+            reasoning_effort,
         )
         .await
         .map_err(map_api_error)?;

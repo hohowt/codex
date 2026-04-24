@@ -12,7 +12,7 @@ pub fn get_default_model_for_oss_provider(provider_id: &str) -> Option<&'static 
     match provider_id {
         LMSTUDIO_OSS_PROVIDER_ID => Some(codex_lmstudio::DEFAULT_OSS_MODEL),
         OLLAMA_OSS_PROVIDER_ID => Some(codex_ollama::DEFAULT_OSS_MODEL),
-        DEEPSEEK_PROVIDER_ID => Some("deepseek-chat"),
+        DEEPSEEK_PROVIDER_ID => Some("deepseek-v4-pro"),
         QWEN_PROVIDER_ID => Some("qwen3.6-plus"),
         MINIMAX_PROVIDER_ID => Some("MiniMax-M2.7"),
         _ => None,

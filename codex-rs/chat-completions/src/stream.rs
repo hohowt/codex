@@ -33,10 +33,22 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     tools: &[Value],
     parallel_tool_calls: bool,
     idle_timeout: Duration,
+    reasoning_effort: Option<String>,
 ) -> Result<ResponseStream, ApiError> {
     // MiniMax does not support stream_options; DeepSeek and other OpenAI-compatible providers do.
     let supports_stream_options = !provider.name.eq_ignore_ascii_case("MiniMax");
-    let body = build_chat_request(model, instructions, input, tools, parallel_tool_calls, supports_stream_options);
+    // Only DeepSeek V4+ supports the thinking/reasoning_effort parameters.
+    let supports_thinking = provider.name.eq_ignore_ascii_case("DeepSeek");
+    let reasoning_effort = if supports_thinking { reasoning_effort } else { None };
+    let body = build_chat_request(
+        model,
+        instructions,
+        input,
+        tools,
+        parallel_tool_calls,
+        supports_stream_options,
+        reasoning_effort.as_deref(),
+    );
 
     let url = provider.url_for_path("chat/completions");
     let mut headers = provider.headers.clone();

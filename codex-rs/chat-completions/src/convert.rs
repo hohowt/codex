@@ -14,6 +14,7 @@ pub fn build_chat_request(
     tools: &[Value],
     parallel_tool_calls: bool,
     supports_stream_options: bool,
+    reasoning_effort: Option<&str>,
 ) -> Value {
     let mut messages: Vec<Value> = Vec::new();
 
@@ -163,6 +164,11 @@ pub fn build_chat_request(
 
     if supports_stream_options {
         body["stream_options"] = json!({"include_usage": true});
+    }
+
+    if let Some(effort) = reasoning_effort {
+        body["thinking"] = json!({"type": "enabled"});
+        body["reasoning_effort"] = json!(effort);
     }
 
     body

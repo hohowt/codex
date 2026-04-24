@@ -4,6 +4,8 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelInstructionsVariables;
 use codex_protocol::openai_models::ModelMessages;
 use codex_protocol::openai_models::ModelVisibility;
+use codex_protocol::openai_models::ReasoningEffort;
+use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_protocol::openai_models::TruncationMode;
 use codex_protocol::openai_models::TruncationPolicyConfig;
 use codex_protocol::openai_models::WebSearchToolType;
@@ -60,8 +62,8 @@ pub fn with_config_overrides(mut model: ModelInfo, config: &ModelsManagerConfig)
 pub fn model_info_from_slug(slug: &str) -> ModelInfo {
     warn!("Unknown model {slug} is used. This will use fallback model metadata.");
     let (context_window, supports_reasoning_summaries, auto_compact_limit) = match slug {
-        s if s.starts_with("deepseek-reasoner") => (128_000, true, Some(100_000)),
-        s if s.starts_with("deepseek") => (128_000, false, Some(100_000)),
+        s if s.starts_with("deepseek-reasoner") => (1_000_000, true, Some(800_000)),
+        s if s.starts_with("deepseek") => (1_000_000, true, Some(800_000)),
         s if s.starts_with("qwen") => (1_000_000, false, Some(800_000)),
         s if s.starts_with("MiniMax") || s.starts_with("minimax") => (204_800, false, Some(160_000)),
         _ => (272_000, false, None),
@@ -114,6 +116,106 @@ fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
         }),
         _ => None,
     }
+}
+
+/// Returns built-in model entries for providers that don't serve a standard
+/// `/models` catalog. These are injected into the model picker so the TUI
+/// `/model` command can offer provider-native models.
+pub fn builtin_provider_models(provider_name: &str) -> Vec<ModelInfo> {
+    if provider_name.eq_ignore_ascii_case("DeepSeek") {
+        deepseek_v4_models()
+    } else {
+        Vec::new()
+    }
+}
+
+fn deepseek_v4_models() -> Vec<ModelInfo> {
+    vec![
+        ModelInfo {
+            slug: "deepseek-v4-pro".to_string(),
+            display_name: "DeepSeek-V4-Pro".to_string(),
+            description: Some("DeepSeek V4 flagship — 1M context, pensar mode".to_string()),
+            default_reasoning_level: Some(ReasoningEffort::XHigh),
+            supported_reasoning_levels: vec![
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::High,
+                    description: "High — default for normal requests".to_string(),
+                },
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::XHigh,
+                    description: "Max — for complex Agent tasks".to_string(),
+                },
+            ],
+            shell_type: ConfigShellToolType::Default,
+            visibility: ModelVisibility::List,
+            supported_in_api: true,
+            priority: 1,
+            additional_speed_tiers: Vec::new(),
+            availability_nux: None,
+            upgrade: None,
+            base_instructions: BASE_INSTRUCTIONS.to_string(),
+            model_messages: None,
+            supports_reasoning_summaries: true,
+            default_reasoning_summary: ReasoningSummary::Auto,
+            support_verbosity: false,
+            default_verbosity: None,
+            apply_patch_tool_type: None,
+            web_search_tool_type: WebSearchToolType::Text,
+            truncation_policy: TruncationPolicyConfig::tokens(10000),
+            supports_parallel_tool_calls: true,
+            supports_image_detail_original: false,
+            context_window: Some(1_000_000),
+            auto_compact_token_limit: Some(800_000),
+            effective_context_window_percent: 95,
+            experimental_supported_tools: Vec::new(),
+            input_modalities: default_input_modalities(),
+            used_fallback_model_metadata: false,
+            supports_search_tool: false,
+        },
+        ModelInfo {
+            slug: "deepseek-v4-flash".to_string(),
+            display_name: "DeepSeek-V4-Flash".to_string(),
+            description: Some(
+                "DeepSeek V4 fast model — 1M context, cost-effective".to_string(),
+            ),
+            default_reasoning_level: Some(ReasoningEffort::High),
+            supported_reasoning_levels: vec![
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::High,
+                    description: "High — default for normal requests".to_string(),
+                },
+                ReasoningEffortPreset {
+                    effort: ReasoningEffort::XHigh,
+                    description: "Max — for complex Agent tasks".to_string(),
+                },
+            ],
+            shell_type: ConfigShellToolType::Default,
+            visibility: ModelVisibility::List,
+            supported_in_api: true,
+            priority: 2,
+            additional_speed_tiers: Vec::new(),
+            availability_nux: None,
+            upgrade: None,
+            base_instructions: BASE_INSTRUCTIONS.to_string(),
+            model_messages: None,
+            supports_reasoning_summaries: true,
+            default_reasoning_summary: ReasoningSummary::Auto,
+            support_verbosity: false,
+            default_verbosity: None,
+            apply_patch_tool_type: None,
+            web_search_tool_type: WebSearchToolType::Text,
+            truncation_policy: TruncationPolicyConfig::tokens(10000),
+            supports_parallel_tool_calls: true,
+            supports_image_detail_original: false,
+            context_window: Some(1_000_000),
+            auto_compact_token_limit: Some(800_000),
+            effective_context_window_percent: 95,
+            experimental_supported_tools: Vec::new(),
+            input_modalities: default_input_modalities(),
+            used_fallback_model_metadata: false,
+            supports_search_tool: false,
+        },
+    ]
 }
 
 #[cfg(test)]

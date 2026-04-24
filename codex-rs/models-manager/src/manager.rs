@@ -221,9 +221,12 @@ impl ModelsManager {
         } else {
             CatalogMode::Default
         };
-        let remote_models = model_catalog
+        let mut remote_models = model_catalog
             .map(|catalog| catalog.models)
             .unwrap_or_else(|| Self::load_remote_models_from_file().unwrap_or_default());
+        // Inject provider-native models (e.g. DeepSeek V4) so they appear in
+        // the TUI /model picker alongside the bundled catalog.
+        remote_models.extend(model_info::builtin_provider_models(&provider.name));
         Self {
             remote_models: RwLock::new(remote_models),
             catalog_mode,

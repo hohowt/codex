@@ -1834,7 +1834,7 @@ impl Config {
             // For non-OpenAI providers, supply a sensible default model so the
             // user doesn't have to specify one explicitly.
             match model_provider_id.as_str() {
-                "deepseek" => Some("deepseek-chat".to_string()),
+                "deepseek" => Some("deepseek-v4-pro".to_string()),
                 "qwen" => Some("qwen3.6-plus".to_string()),
                 "minimax" => Some("MiniMax-M2.7".to_string()),
                 _ => None,
