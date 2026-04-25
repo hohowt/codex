@@ -2,6 +2,7 @@
 
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use serde_json::Value;
 use serde_json::json;
@@ -26,6 +27,10 @@ pub fn build_chat_request(
         }));
     }
 
+    // Track raw reasoning_content from a Reasoning item so it can be
+    // attached to a subsequent assistant message with tool_calls.
+    let mut pending_reasoning_content: Option<String> = None;
+
     // Convert each ResponseItem into one or more Chat Completions messages.
     for item in input {
         match item {
@@ -46,6 +51,8 @@ pub fn build_chat_request(
                         "content": text,
                     }));
                 } else {
+                    // Non-assistant messages break the reasoning→tool_call chain.
+                    pending_reasoning_content = None;
                     messages.push(json!({
                         "role": mapped_role,
                         "content": text,
@@ -76,15 +83,27 @@ pub fn build_chat_request(
                         .as_array_mut()
                         .unwrap()
                         .push(tool_call);
+                    // Attach reasoning_content if not already present.
+                    if last.get("reasoning_content").is_none() {
+                        if let Some(rc) = pending_reasoning_content.take() {
+                            last["reasoning_content"] = json!(rc);
+                        }
+                    }
                 } else {
-                    messages.push(json!({
+                    let mut msg = json!({
                         "role": "assistant",
                         "content": null,
                         "tool_calls": [tool_call],
-                    }));
+                    });
+                    if let Some(rc) = pending_reasoning_content.take() {
+                        msg["reasoning_content"] = json!(rc);
+                    }
+                    messages.push(msg);
                 }
             }
             ResponseItem::FunctionCallOutput { call_id, output } => {
+                // Tool output breaks the reasoning→tool_call chain.
+                pending_reasoning_content = None;
                 let text = function_output_to_string(output);
                 messages.push(json!({
                     "role": "tool",
@@ -118,15 +137,40 @@ pub fn build_chat_request(
                         .as_array_mut()
                         .unwrap()
                         .push(tool_call);
+                    // Attach reasoning_content if not already present.
+                    if last.get("reasoning_content").is_none() {
+                        if let Some(rc) = pending_reasoning_content.take() {
+                            last["reasoning_content"] = json!(rc);
+                        }
+                    }
                 } else {
-                    messages.push(json!({
+                    let mut msg = json!({
                         "role": "assistant",
                         "content": null,
                         "tool_calls": [tool_call],
-                    }));
+                    });
+                    if let Some(rc) = pending_reasoning_content.take() {
+                        msg["reasoning_content"] = json!(rc);
+                    }
+                    messages.push(msg);
                 }
             }
-            ResponseItem::Reasoning { summary, .. } => {
+            ResponseItem::Reasoning { summary, content, .. } => {
+                // Store raw reasoning content for passing back to the API
+                // when a tool call follows (required by DeepSeek V4 thinking mode).
+                if let Some(content_items) = content {
+                    let raw_text: String = content_items
+                        .iter()
+                        .filter_map(|c| match c {
+                            ReasoningItemContent::ReasoningText { text } => Some(text.as_str()),
+                            ReasoningItemContent::Text { text } => Some(text.as_str()),
+                        })
+                        .collect::<Vec<_>>()
+                        .join("");
+                    if !raw_text.is_empty() {
+                        pending_reasoning_content = Some(raw_text);
+                    }
+                }
                 // Include reasoning summaries as assistant context.
                 use codex_protocol::models::ReasoningItemReasoningSummary;
                 let text: String = summary

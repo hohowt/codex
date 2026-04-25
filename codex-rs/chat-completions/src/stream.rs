@@ -8,6 +8,7 @@ use codex_api::Provider;
 use codex_api::AuthProvider;
 use codex_api::ReqwestTransport;
 use codex_protocol::models::ContentItem;
+use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::TokenUsage;
 use eventsource_stream::Eventsource;
@@ -288,6 +289,20 @@ async fn process_chat_sse(
                                 }],
                                 end_turn: Some(true),
                                 phase: None,
+                            };
+                            let _ = tx.send(Ok(ResponseEvent::OutputItemDone(item))).await;
+                        }
+
+                        // Emit accumulated reasoning content so it can be
+                        // passed back to the API on subsequent tool-call turns.
+                        if !accumulated_reasoning.is_empty() {
+                            let item = ResponseItem::Reasoning {
+                                id: String::new(),
+                                summary: Vec::new(),
+                                content: Some(vec![ReasoningItemContent::ReasoningText {
+                                    text: accumulated_reasoning.clone(),
+                                }]),
+                                encrypted_content: None,
                             };
                             let _ = tx.send(Ok(ResponseEvent::OutputItemDone(item))).await;
                         }
