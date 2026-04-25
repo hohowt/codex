@@ -30,6 +30,7 @@ pub fn build_chat_request(
     // Track raw reasoning_content from a Reasoning item so it can be
     // attached to a subsequent assistant message with tool_calls.
     let mut pending_reasoning_content: Option<String> = None;
+    let mut last_assistant_message_index: Option<usize> = None;
 
     // Convert each ResponseItem into one or more Chat Completions messages.
     for item in input {
@@ -48,9 +49,11 @@ pub fn build_chat_request(
                         "role": "assistant",
                         "content": text,
                     }));
+                    last_assistant_message_index = Some(messages.len().saturating_sub(1));
                 } else {
                     // Non-assistant messages break the reasoning→tool_call chain.
                     pending_reasoning_content = None;
+                    last_assistant_message_index = None;
                     messages.push(json!({
                         "role": mapped_role,
                         "content": text,
@@ -84,6 +87,14 @@ pub fn build_chat_request(
                             last["reasoning_content"] = json!(rc);
                         }
                     }
+                } else if let Some(index) = last_assistant_message_index
+                    && let Some(last) = messages.get_mut(index)
+                    && last.get("tool_calls").is_none()
+                {
+                    last["tool_calls"] = json!([tool_call]);
+                    if let Some(rc) = pending_reasoning_content.take() {
+                        last["reasoning_content"] = json!(rc);
+                    }
                 } else {
                     let mut msg = json!({
                         "role": "assistant",
@@ -95,10 +106,12 @@ pub fn build_chat_request(
                     }
                     messages.push(msg);
                 }
+                last_assistant_message_index = None;
             }
             ResponseItem::FunctionCallOutput { call_id, output } => {
                 // Tool output breaks the reasoning→tool_call chain.
                 pending_reasoning_content = None;
+                last_assistant_message_index = None;
                 let text = function_output_to_string(output);
                 messages.push(json!({
                     "role": "tool",
@@ -135,6 +148,14 @@ pub fn build_chat_request(
                             last["reasoning_content"] = json!(rc);
                         }
                     }
+                } else if let Some(index) = last_assistant_message_index
+                    && let Some(last) = messages.get_mut(index)
+                    && last.get("tool_calls").is_none()
+                {
+                    last["tool_calls"] = json!([tool_call]);
+                    if let Some(rc) = pending_reasoning_content.take() {
+                        last["reasoning_content"] = json!(rc);
+                    }
                 } else {
                     let mut msg = json!({
                         "role": "assistant",
@@ -146,6 +167,7 @@ pub fn build_chat_request(
                     }
                     messages.push(msg);
                 }
+                last_assistant_message_index = None;
             }
             ResponseItem::Reasoning {
                 summary, content, ..
@@ -179,6 +201,7 @@ pub fn build_chat_request(
                         "role": "assistant",
                         "content": format!("<reasoning>\n{text}\n</reasoning>"),
                     }));
+                    last_assistant_message_index = Some(messages.len().saturating_sub(1));
                 }
             }
             // Skip items that have no Chat Completions equivalent.
@@ -293,6 +316,46 @@ mod tests {
             json!([{
                 "role": "assistant",
                 "content": null,
+                "reasoning_content": "need-tool",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": "{\"command\":\"pwd\"}",
+                    }
+                }]
+            }])
+        );
+    }
+
+    #[test]
+    fn merges_assistant_content_and_tool_call_into_single_message() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                assistant_message("Let me check."),
+                reasoning_item("need-tool"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([{
+                "role": "assistant",
+                "content": "Let me check.",
                 "reasoning_content": "need-tool",
                 "tool_calls": [{
                     "id": "call_1",
