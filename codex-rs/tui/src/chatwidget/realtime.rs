@@ -1,4 +1,7 @@
 use super::*;
+use crate::webrtc_stub::RealtimeWebrtcEvent;
+use crate::webrtc_stub::RealtimeWebrtcSession;
+use crate::webrtc_stub::RealtimeWebrtcSessionHandle;
 use codex_config::config_toml::RealtimeTransport;
 use codex_protocol::protocol::ConversationStartParams;
 use codex_protocol::protocol::ConversationStartTransport;
@@ -7,9 +10,6 @@ use codex_protocol::protocol::RealtimeConversationClosedEvent;
 use codex_protocol::protocol::RealtimeConversationRealtimeEvent;
 use codex_protocol::protocol::RealtimeConversationStartedEvent;
 use codex_protocol::protocol::RealtimeEvent;
-use crate::webrtc_stub::RealtimeWebrtcEvent;
-use crate::webrtc_stub::RealtimeWebrtcSession;
-use crate::webrtc_stub::RealtimeWebrtcSessionHandle;
 #[cfg(not(target_os = "linux"))]
 use std::sync::atomic::AtomicU16;
 #[cfg(not(target_os = "linux"))]

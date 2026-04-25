@@ -221,12 +221,10 @@ impl ModelsManager {
         } else {
             CatalogMode::Default
         };
-        let mut remote_models = model_catalog
-            .map(|catalog| catalog.models)
-            .unwrap_or_else(|| Self::load_remote_models_from_file().unwrap_or_default());
-        // Inject provider-native models (e.g. DeepSeek V4) so they appear in
-        // the TUI /model picker alongside the bundled catalog.
-        remote_models.extend(model_info::builtin_provider_models(&provider.name));
+        let mut remote_models = Self::base_models_for_provider(&provider).unwrap_or_default();
+        if let Some(catalog) = model_catalog {
+            Self::merge_models(&mut remote_models, catalog.models);
+        }
         Self {
             remote_models: RwLock::new(remote_models),
             catalog_mode,
@@ -476,22 +474,42 @@ impl ModelsManager {
 
     /// Replace the cached remote models and rebuild the derived presets list.
     async fn apply_remote_models(&self, models: Vec<ModelInfo>) {
-        let mut existing_models = Self::load_remote_models_from_file().unwrap_or_default();
-        for model in models {
-            if let Some(existing_index) = existing_models
-                .iter()
-                .position(|existing| existing.slug == model.slug)
-            {
-                existing_models[existing_index] = model;
-            } else {
-                existing_models.push(model);
-            }
-        }
+        let mut existing_models =
+            Self::base_models_for_provider(&self.provider).unwrap_or_default();
+        Self::merge_models(&mut existing_models, models);
         *self.remote_models.write().await = existing_models;
     }
 
     fn load_remote_models_from_file() -> Result<Vec<ModelInfo>, std::io::Error> {
         Ok(crate::bundled_models_response()?.models)
+    }
+
+    fn base_models_for_provider(
+        provider: &ModelProviderInfo,
+    ) -> Result<Vec<ModelInfo>, std::io::Error> {
+        let mut remote_models = Self::load_remote_models_from_file()?;
+        Self::merge_models(
+            &mut remote_models,
+            model_info::builtin_provider_models(&provider.name, provider.base_url.as_deref()),
+        );
+        Ok(remote_models)
+    }
+
+    fn merge_models(existing_models: &mut Vec<ModelInfo>, models: Vec<ModelInfo>) {
+        for model in models {
+            if let Some(existing_index) = existing_models
+                .iter()
+                .position(|existing| existing.slug == model.slug)
+            {
+                if existing_models[existing_index].used_fallback_model_metadata
+                    || !model.used_fallback_model_metadata
+                {
+                    existing_models[existing_index] = model;
+                }
+            } else {
+                existing_models.push(model);
+            }
+        }
     }
 
     /// Attempt to satisfy the refresh from the cache when it matches the provider and TTL.

@@ -370,11 +370,7 @@ pub fn built_in_model_providers(
         ),
         (
             MINIMAX_PROVIDER_ID,
-            create_chat_provider(
-                "MiniMax",
-                "https://api.minimaxi.com/v1",
-                "MINIMAX_API_KEY",
-            ),
+            create_chat_provider("MiniMax", "https://api.minimaxi.com/v1", "MINIMAX_API_KEY"),
         ),
     ]
     .into_iter()

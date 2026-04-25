@@ -106,6 +106,27 @@ fn provider_for(base_url: String) -> ModelProviderInfo {
     }
 }
 
+fn deepseek_compatible_provider(name: &str, base_url: String) -> ModelProviderInfo {
+    ModelProviderInfo {
+        name: name.to_string(),
+        base_url: Some(base_url),
+        env_key: None,
+        env_key_instructions: None,
+        experimental_bearer_token: None,
+        auth: None,
+        wire_api: WireApi::Chat,
+        query_params: None,
+        http_headers: None,
+        env_http_headers: None,
+        request_max_retries: Some(0),
+        stream_max_retries: Some(0),
+        stream_idle_timeout_ms: Some(5_000),
+        websocket_connect_timeout_ms: None,
+        requires_openai_auth: false,
+        supports_websockets: false,
+    }
+}
+
 struct ProviderAuthScript {
     tempdir: TempDir,
     command: String,
@@ -685,6 +706,37 @@ async fn refresh_available_models_drops_removed_remote_models() {
         refreshed_mock.requests().len(),
         1,
         "second refresh should only hit /models once"
+    );
+}
+
+#[tokio::test]
+async fn list_models_includes_deepseek_builtin_models_for_custom_provider_name() {
+    let codex_home = tempdir().expect("temp dir");
+    let auth_manager =
+        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+    let provider =
+        deepseek_compatible_provider("My DeepSeek Gateway", "https://api.deepseek.com/v1".into());
+    let manager = ModelsManager::with_provider_for_tests(
+        codex_home.path().to_path_buf(),
+        auth_manager,
+        provider,
+    );
+
+    let available = manager
+        .try_list_models()
+        .expect("models should be available");
+
+    assert!(
+        available
+            .iter()
+            .any(|preset| preset.model == "deepseek-v4-pro"),
+        "deepseek-v4-pro should be listed for DeepSeek-compatible providers"
+    );
+    assert!(
+        available
+            .iter()
+            .any(|preset| preset.model == "deepseek-v4-flash"),
+        "deepseek-v4-flash should be listed for DeepSeek-compatible providers"
     );
 }
 

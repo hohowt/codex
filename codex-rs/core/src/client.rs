@@ -1479,8 +1479,14 @@ impl ModelClientSession {
                 .await
             }
             WireApi::Chat => {
-                self.stream_chat_completions_api(prompt, model_info, session_telemetry, effort, summary)
-                    .await
+                self.stream_chat_completions_api(
+                    prompt,
+                    model_info,
+                    session_telemetry,
+                    effort,
+                    summary,
+                )
+                .await
             }
         }
     }

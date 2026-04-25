@@ -34,9 +34,7 @@ pub fn build_chat_request(
     // Convert each ResponseItem into one or more Chat Completions messages.
     for item in input {
         match item {
-            ResponseItem::Message {
-                role, content, ..
-            } => {
+            ResponseItem::Message { role, content, .. } => {
                 let text = content_items_to_text(content);
                 // Map OpenAI-specific roles to standard Chat Completions roles.
                 // "developer" is an OpenAI-only role; most providers only accept
@@ -79,10 +77,7 @@ pub fn build_chat_request(
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
                     && last.get("tool_calls").is_some()
                 {
-                    last["tool_calls"]
-                        .as_array_mut()
-                        .unwrap()
-                        .push(tool_call);
+                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
                     // Attach reasoning_content if not already present.
                     if last.get("reasoning_content").is_none() {
                         if let Some(rc) = pending_reasoning_content.take() {
@@ -133,10 +128,7 @@ pub fn build_chat_request(
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
                     && last.get("tool_calls").is_some()
                 {
-                    last["tool_calls"]
-                        .as_array_mut()
-                        .unwrap()
-                        .push(tool_call);
+                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
                     // Attach reasoning_content if not already present.
                     if last.get("reasoning_content").is_none() {
                         if let Some(rc) = pending_reasoning_content.take() {
@@ -155,9 +147,11 @@ pub fn build_chat_request(
                     messages.push(msg);
                 }
             }
-            ResponseItem::Reasoning { summary, content, .. } => {
+            ResponseItem::Reasoning {
+                summary, content, ..
+            } => {
                 // Store raw reasoning content for passing back to the API
-                // when a tool call follows (required by DeepSeek V4 thinking mode).
+                // on a subsequent replay turn (required by DeepSeek thinking mode).
                 if let Some(content_items) = content {
                     let raw_text: String = content_items
                         .iter()
@@ -216,6 +210,101 @@ pub fn build_chat_request(
     }
 
     body
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_protocol::models::ContentItem;
+    use codex_protocol::models::ReasoningItemContent;
+    use pretty_assertions::assert_eq;
+    use serde_json::json;
+
+    fn assistant_message(text: &str) -> ResponseItem {
+        ResponseItem::Message {
+            id: None,
+            role: "assistant".to_string(),
+            content: vec![ContentItem::OutputText {
+                text: text.to_string(),
+            }],
+            end_turn: Some(true),
+            phase: None,
+        }
+    }
+
+    fn reasoning_item(text: &str) -> ResponseItem {
+        ResponseItem::Reasoning {
+            id: String::new(),
+            summary: Vec::new(),
+            content: Some(vec![ReasoningItemContent::ReasoningText {
+                text: text.to_string(),
+            }]),
+            encrypted_content: None,
+        }
+    }
+
+    #[test]
+    fn does_not_attach_reasoning_content_to_plain_assistant_history() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                assistant_message("done"),
+                reasoning_item("chain-of-thought"),
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([{
+                "role": "assistant",
+                "content": "done",
+            }])
+        );
+    }
+
+    #[test]
+    fn attaches_reasoning_content_to_tool_call_history() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                reasoning_item("need-tool"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([{
+                "role": "assistant",
+                "content": null,
+                "reasoning_content": "need-tool",
+                "tool_calls": [{
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {
+                        "name": "shell",
+                        "arguments": "{\"command\":\"pwd\"}",
+                    }
+                }]
+            }])
+        );
+    }
 }
 
 fn content_items_to_text(items: &[ContentItem]) -> String {

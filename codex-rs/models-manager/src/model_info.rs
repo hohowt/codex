@@ -65,7 +65,9 @@ pub fn model_info_from_slug(slug: &str) -> ModelInfo {
         s if s.starts_with("deepseek-reasoner") => (1_000_000, true, Some(800_000)),
         s if s.starts_with("deepseek") => (1_000_000, true, Some(800_000)),
         s if s.starts_with("qwen") => (1_000_000, false, Some(800_000)),
-        s if s.starts_with("MiniMax") || s.starts_with("minimax") => (204_800, false, Some(160_000)),
+        s if s.starts_with("MiniMax") || s.starts_with("minimax") => {
+            (204_800, false, Some(160_000))
+        }
         _ => (272_000, false, None),
     };
     ModelInfo {
@@ -121,12 +123,22 @@ fn local_personality_messages_for_slug(slug: &str) -> Option<ModelMessages> {
 /// Returns built-in model entries for providers that don't serve a standard
 /// `/models` catalog. These are injected into the model picker so the TUI
 /// `/model` command can offer provider-native models.
-pub fn builtin_provider_models(provider_name: &str) -> Vec<ModelInfo> {
-    if provider_name.eq_ignore_ascii_case("DeepSeek") {
+pub fn builtin_provider_models(
+    provider_name: &str,
+    provider_base_url: Option<&str>,
+) -> Vec<ModelInfo> {
+    if is_deepseek_provider(provider_name, provider_base_url) {
         deepseek_v4_models()
     } else {
         Vec::new()
     }
+}
+
+fn is_deepseek_provider(provider_name: &str, provider_base_url: Option<&str>) -> bool {
+    provider_name.eq_ignore_ascii_case("DeepSeek")
+        || provider_base_url
+            .map(str::to_ascii_lowercase)
+            .is_some_and(|base_url| base_url.contains("deepseek.com"))
 }
 
 fn deepseek_v4_models() -> Vec<ModelInfo> {
@@ -175,9 +187,7 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
         ModelInfo {
             slug: "deepseek-v4-flash".to_string(),
             display_name: "DeepSeek-V4-Flash".to_string(),
-            description: Some(
-                "DeepSeek V4 fast model — 1M context, cost-effective".to_string(),
-            ),
+            description: Some("DeepSeek V4 fast model — 1M context, cost-effective".to_string()),
             default_reasoning_level: Some(ReasoningEffort::High),
             supported_reasoning_levels: vec![
                 ReasoningEffortPreset {

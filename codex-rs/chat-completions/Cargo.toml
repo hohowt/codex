@@ -17,3 +17,6 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 uuid = { version = "1", features = ["v4"] }
 eventsource-stream = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

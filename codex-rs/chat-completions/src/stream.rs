@@ -1,12 +1,12 @@
 //! Streams a Chat Completions request and converts SSE chunks into `ResponseEvent`s.
 
 use crate::convert::build_chat_request;
+use codex_api::ApiError;
+use codex_api::AuthProvider;
+use codex_api::Provider;
+use codex_api::ReqwestTransport;
 use codex_api::ResponseEvent;
 use codex_api::ResponseStream;
-use codex_api::ApiError;
-use codex_api::Provider;
-use codex_api::AuthProvider;
-use codex_api::ReqwestTransport;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
@@ -37,10 +37,14 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     reasoning_effort: Option<String>,
 ) -> Result<ResponseStream, ApiError> {
     // MiniMax does not support stream_options; DeepSeek and other OpenAI-compatible providers do.
-    let supports_stream_options = !provider.name.eq_ignore_ascii_case("MiniMax");
+    let supports_stream_options = !is_minimax_provider(&provider.name, &provider.base_url);
     // Only DeepSeek V4+ supports the thinking/reasoning_effort parameters.
-    let supports_thinking = provider.name.eq_ignore_ascii_case("DeepSeek");
-    let reasoning_effort = if supports_thinking { reasoning_effort } else { None };
+    let supports_thinking = is_deepseek_provider(&provider.name, &provider.base_url);
+    let reasoning_effort = if supports_thinking {
+        reasoning_effort
+    } else {
+        None
+    };
     let body = build_chat_request(
         model,
         instructions,
@@ -92,13 +96,17 @@ pub async fn stream_chat_completions<A: AuthProvider>(
 
     let (tx, rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
 
-    tokio::spawn(process_chat_sse(
-        Box::pin(byte_stream),
-        tx,
-        idle_timeout,
-    ));
+    tokio::spawn(process_chat_sse(Box::pin(byte_stream), tx, idle_timeout));
 
     Ok(ResponseStream { rx_event: rx })
+}
+
+fn is_deepseek_provider(name: &str, base_url: &str) -> bool {
+    name.eq_ignore_ascii_case("DeepSeek") || base_url.to_ascii_lowercase().contains("deepseek.com")
+}
+
+fn is_minimax_provider(name: &str, base_url: &str) -> bool {
+    name.eq_ignore_ascii_case("MiniMax") || base_url.to_ascii_lowercase().contains("minimax")
 }
 
 fn reqwest_headers_from_http(headers: http::HeaderMap) -> reqwest::header::HeaderMap {
