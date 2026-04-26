@@ -38,6 +38,7 @@ pub fn build_chat_request(
     // attached to a subsequent assistant message with tool_calls.
     let mut pending_reasoning_content: Option<String> = None;
     let mut last_assistant_message_index: Option<usize> = None;
+    let mut current_turn_has_tool_calls = false;
 
     // Convert each ResponseItem into one or more Chat Completions messages.
     for item in input {
@@ -52,15 +53,34 @@ pub fn build_chat_request(
                     other => other,
                 };
                 if mapped_role == "assistant" {
-                    messages.push(json!({
-                        "role": "assistant",
-                        "content": text,
-                    }));
-                    last_assistant_message_index = Some(messages.len().saturating_sub(1));
+                    if reasoning_effort.is_some()
+                        && let Some(index) = last_assistant_message_index
+                        && let Some(last) = messages.get_mut(index)
+                        && last.get("role").and_then(Value::as_str) == Some("assistant")
+                        && last.get("tool_calls").is_none()
+                    {
+                        let existing = last
+                            .get("content")
+                            .and_then(Value::as_str)
+                            .unwrap_or_default();
+                        let merged = match (existing.is_empty(), text.is_empty()) {
+                            (true, _) => text.clone(),
+                            (_, true) => existing.to_string(),
+                            (false, false) => format!("{existing}\n{text}"),
+                        };
+                        last["content"] = json!(merged);
+                    } else {
+                        messages.push(json!({
+                            "role": "assistant",
+                            "content": text,
+                        }));
+                        last_assistant_message_index = Some(messages.len().saturating_sub(1));
+                    }
                 } else {
                     // Non-assistant messages break the reasoning→tool_call chain.
                     pending_reasoning_content = None;
                     last_assistant_message_index = None;
+                    current_turn_has_tool_calls = false;
                     messages.push(json!({
                         "role": mapped_role,
                         "content": text,
@@ -83,6 +103,7 @@ pub fn build_chat_request(
                         "arguments": arguments,
                     }
                 });
+                current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
                     && last.get("tool_calls").is_some()
@@ -144,6 +165,7 @@ pub fn build_chat_request(
                         "arguments": args.to_string(),
                     }
                 });
+                current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
                     && last.get("tool_calls").is_some()
@@ -191,7 +213,17 @@ pub fn build_chat_request(
                         .collect::<Vec<_>>()
                         .join("");
                     if !raw_text.is_empty() {
-                        pending_reasoning_content = Some(raw_text);
+                        if current_turn_has_tool_calls
+                            && let Some(index) = last_assistant_message_index
+                            && let Some(last) = messages.get_mut(index)
+                            && last.get("role").and_then(Value::as_str) == Some("assistant")
+                            && last.get("tool_calls").is_none()
+                            && last.get("reasoning_content").is_none()
+                        {
+                            last["reasoning_content"] = json!(raw_text);
+                        } else {
+                            pending_reasoning_content = Some(raw_text);
+                        }
                     }
                 }
                 // Include reasoning summaries as assistant context.
@@ -568,6 +600,122 @@ mod tests {
                 {
                     "role": "assistant",
                     "content": "Done.",
+                },
+                {
+                    "role": "user",
+                    "content": "next question",
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn merges_consecutive_assistant_messages_before_tool_call_in_thinking_mode() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                user_message("question"),
+                assistant_message("First step."),
+                assistant_message("Second step."),
+                reasoning_item("need-tool"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([
+                {
+                    "role": "user",
+                    "content": "question",
+                },
+                {
+                    "role": "assistant",
+                    "content": "First step.\nSecond step.",
+                    "reasoning_content": "need-tool",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": "{\"command\":\"pwd\"}",
+                        }
+                    }]
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn preserves_reasoning_content_for_final_assistant_after_tool_turn() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                user_message("question"),
+                assistant_message("Let me check."),
+                reasoning_item("need-tool"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+                ResponseItem::FunctionCallOutput {
+                    call_id: "call_1".to_string(),
+                    output: FunctionCallOutputPayload::from_text("ok".to_string()),
+                },
+                assistant_message("Done."),
+                reasoning_item("final-thought"),
+                user_message("next question"),
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([
+                {
+                    "role": "user",
+                    "content": "question",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Let me check.",
+                    "reasoning_content": "need-tool",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": "{\"command\":\"pwd\"}",
+                        }
+                    }]
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "\"ok\"",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Done.",
+                    "reasoning_content": "final-thought",
                 },
                 {
                     "role": "user",
