@@ -18,6 +18,13 @@ pub fn build_chat_request(
     reasoning_effort: Option<&str>,
 ) -> Value {
     let mut messages: Vec<Value> = Vec::new();
+    let sanitized_input_storage;
+    let input = if reasoning_effort.is_some() {
+        sanitized_input_storage = sanitize_input_for_thinking_tool_replay(input);
+        sanitized_input_storage.as_slice()
+    } else {
+        input
+    };
 
     // System message from instructions.
     if !instructions.is_empty() {
@@ -235,10 +242,86 @@ pub fn build_chat_request(
     body
 }
 
+fn sanitize_input_for_thinking_tool_replay(input: &[ResponseItem]) -> Vec<ResponseItem> {
+    let mut sanitized = Vec::new();
+    let mut model_turn_segment = Vec::new();
+
+    for item in input {
+        if is_non_assistant_message(item) {
+            sanitized.extend(sanitize_model_turn_segment(&model_turn_segment));
+            model_turn_segment.clear();
+            sanitized.push(item.clone());
+        } else {
+            model_turn_segment.push(item.clone());
+        }
+    }
+
+    sanitized.extend(sanitize_model_turn_segment(&model_turn_segment));
+    sanitized
+}
+
+fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
+    let mut saw_reasoning_content = false;
+    let mut saw_tool_call_without_reasoning = false;
+    let mut last_tool_activity_index = None;
+
+    for (index, item) in segment.iter().enumerate() {
+        match item {
+            ResponseItem::Reasoning { content, .. } => {
+                if content.as_ref().is_some_and(|items| {
+                    items.iter().any(|item| match item {
+                        ReasoningItemContent::ReasoningText { text }
+                        | ReasoningItemContent::Text { text } => !text.is_empty(),
+                    })
+                }) {
+                    saw_reasoning_content = true;
+                }
+            }
+            ResponseItem::FunctionCall { .. } | ResponseItem::LocalShellCall { .. } => {
+                last_tool_activity_index = Some(index);
+                if !saw_reasoning_content {
+                    saw_tool_call_without_reasoning = true;
+                }
+            }
+            ResponseItem::FunctionCallOutput { .. }
+            | ResponseItem::CustomToolCallOutput { .. }
+            | ResponseItem::ToolSearchOutput { .. } => {
+                last_tool_activity_index = Some(index);
+            }
+            _ => {}
+        }
+    }
+
+    if !saw_tool_call_without_reasoning {
+        return segment.to_vec();
+    }
+
+    let Some(last_tool_activity_index) = last_tool_activity_index else {
+        return segment.to_vec();
+    };
+
+    let trailing_assistant_messages: Vec<ResponseItem> = segment[last_tool_activity_index + 1..]
+        .iter()
+        .filter(|item| matches!(item, ResponseItem::Message { role, .. } if role == "assistant"))
+        .cloned()
+        .collect();
+
+    if trailing_assistant_messages.is_empty() {
+        segment.to_vec()
+    } else {
+        trailing_assistant_messages
+    }
+}
+
+fn is_non_assistant_message(item: &ResponseItem) -> bool {
+    matches!(item, ResponseItem::Message { role, .. } if role != "assistant")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use codex_protocol::models::ContentItem;
+    use codex_protocol::models::FunctionCallOutputPayload;
     use codex_protocol::models::ReasoningItemContent;
     use pretty_assertions::assert_eq;
     use serde_json::json;
@@ -251,6 +334,18 @@ mod tests {
                 text: text.to_string(),
             }],
             end_turn: Some(true),
+            phase: None,
+        }
+    }
+
+    fn user_message(text: &str) -> ResponseItem {
+        ResponseItem::Message {
+            id: None,
+            role: "user".to_string(),
+            content: vec![ContentItem::InputText {
+                text: text.to_string(),
+            }],
+            end_turn: None,
             phase: None,
         }
     }
@@ -366,6 +461,119 @@ mod tests {
                     }
                 }]
             }])
+        );
+    }
+
+    #[test]
+    fn collapses_completed_tool_turn_without_reasoning_content() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                user_message("question"),
+                assistant_message("Let me check."),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+                ResponseItem::FunctionCallOutput {
+                    call_id: "call_1".to_string(),
+                    output: FunctionCallOutputPayload::from_text("ok".to_string()),
+                },
+                assistant_message("Done."),
+                user_message("next question"),
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([
+                {
+                    "role": "user",
+                    "content": "question",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Done.",
+                },
+                {
+                    "role": "user",
+                    "content": "next question",
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn preserves_tool_turn_when_reasoning_content_exists() {
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                user_message("question"),
+                assistant_message("Let me check."),
+                reasoning_item("need-tool"),
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"pwd\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+                ResponseItem::FunctionCallOutput {
+                    call_id: "call_1".to_string(),
+                    output: FunctionCallOutputPayload::from_text("ok".to_string()),
+                },
+                assistant_message("Done."),
+                user_message("next question"),
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        assert_eq!(
+            body["messages"],
+            json!([
+                {
+                    "role": "user",
+                    "content": "question",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Let me check.",
+                    "reasoning_content": "need-tool",
+                    "tool_calls": [{
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {
+                            "name": "shell",
+                            "arguments": "{\"command\":\"pwd\"}",
+                        }
+                    }]
+                },
+                {
+                    "role": "tool",
+                    "tool_call_id": "call_1",
+                    "content": "\"ok\"",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Done.",
+                },
+                {
+                    "role": "user",
+                    "content": "next question",
+                }
+            ])
         );
     }
 }
