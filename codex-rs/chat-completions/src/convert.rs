@@ -309,7 +309,9 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
                     saw_reasoning_content = true;
                 }
             }
-            ResponseItem::FunctionCall { .. } | ResponseItem::LocalShellCall { .. } => {
+            ResponseItem::FunctionCall { .. }
+            | ResponseItem::CustomToolCall { .. }
+            | ResponseItem::LocalShellCall { .. } => {
                 last_tool_activity_index = Some(index);
                 if !saw_reasoning_content {
                     saw_tool_call_without_reasoning = true;
@@ -339,7 +341,24 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
         .collect();
 
     if trailing_assistant_messages.is_empty() {
-        segment.to_vec()
+        // No trailing assistant messages to keep as context for this turn.
+        // Strip tool calls and outputs that lack reasoning_content to avoid
+        // DeepSeek 400: "reasoning_content must be passed back to the API".
+        segment
+            .iter()
+            .filter(|item| {
+                !matches!(
+                    item,
+                    ResponseItem::FunctionCall { .. }
+                        | ResponseItem::CustomToolCall { .. }
+                        | ResponseItem::LocalShellCall { .. }
+                        | ResponseItem::FunctionCallOutput { .. }
+                        | ResponseItem::CustomToolCallOutput { .. }
+                        | ResponseItem::ToolSearchOutput { .. }
+                )
+            })
+            .cloned()
+            .collect()
     } else {
         trailing_assistant_messages
     }
@@ -716,6 +735,59 @@ mod tests {
                     "role": "assistant",
                     "content": "Done.",
                     "reasoning_content": "final-thought",
+                },
+                {
+                    "role": "user",
+                    "content": "next question",
+                }
+            ])
+        );
+    }
+
+    #[test]
+    fn strips_tool_calls_without_reasoning_when_no_trailing_assistant() {
+        // When old history has tool calls without reasoning_content
+        // AND no trailing assistant message, tool calls must be stripped
+        // to avoid DeepSeek 400: "reasoning_content must be passed back".
+        let body = build_chat_request(
+            "deepseek-v4-pro",
+            "",
+            &[
+                user_message("question"),
+                assistant_message("Let me check."),
+                // No reasoning item here – simulates old history before the fix.
+                ResponseItem::FunctionCall {
+                    id: None,
+                    name: "shell".to_string(),
+                    namespace: None,
+                    arguments: "{\"command\":\"ls\"}".to_string(),
+                    call_id: "call_1".to_string(),
+                },
+                ResponseItem::FunctionCallOutput {
+                    call_id: "call_1".to_string(),
+                    output: FunctionCallOutputPayload::from_text("file.txt".to_string()),
+                },
+                // No trailing assistant message.
+                user_message("next question"),
+            ],
+            &[],
+            false,
+            true,
+            Some("high"),
+        );
+
+        // Tool calls without reasoning_content are stripped;
+        // only the assistant text and user messages remain.
+        assert_eq!(
+            body["messages"],
+            json!([
+                {
+                    "role": "user",
+                    "content": "question",
+                },
+                {
+                    "role": "assistant",
+                    "content": "Let me check.",
                 },
                 {
                     "role": "user",
