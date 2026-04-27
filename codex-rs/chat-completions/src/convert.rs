@@ -269,9 +269,10 @@ pub fn build_chat_request(
                     .and_then(|tc| tc.as_array())
                     .map_or(0, |arr| arr.len());
                 msg.as_object_mut().unwrap().remove("tool_calls");
-                if msg.get("content").and_then(Value::as_str) == Some("null")
-                    || msg.get("content").is_none()
-                {
+                // After removing tool_calls, ensure content is set.
+                // The message may have been `"content": null` (JSON null)
+                // which serde_json represents as Value::Null (not None).
+                if msg.get("content").is_none_or(|v| v.is_null()) {
                     msg["content"] = json!("");
                 }
                 stripped_count += 1;
