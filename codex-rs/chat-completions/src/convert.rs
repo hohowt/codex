@@ -278,7 +278,6 @@ pub fn build_chat_request(
                 let msg = format!(
                     "[reasoning_content] build_chat_request 防御性移除: 消息 #{i} 含 {tool_count} 个 tool_call 但无 reasoning_content"
                 );
-                eprintln!("{msg}");
                 diagnostics.push(msg);
             }
         }
@@ -286,7 +285,6 @@ pub fn build_chat_request(
             let msg = format!(
                 "[reasoning_content] build_chat_request: 共移除 {stripped_count} 条无 reasoning 的 tool_call 消息"
             );
-            eprintln!("{msg}");
             diagnostics.push(msg);
         }
     }
@@ -384,7 +382,6 @@ fn sanitize_model_turn_segment(
 
     let msg =
         "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call";
-    eprintln!("{msg}");
     diagnostics.push(msg.to_string());
 
     let Some(last_tool_activity_index) = last_tool_activity_index else {
@@ -403,7 +400,6 @@ fn sanitize_model_turn_segment(
         // DeepSeek 400: "reasoning_content must be passed back to the API".
         let msg =
             "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs";
-        eprintln!("{msg}");
         diagnostics.push(msg.to_string());
         segment
             .iter()
@@ -425,7 +421,6 @@ fn sanitize_model_turn_segment(
             "[reasoning_content] sanitize_model_turn_segment: 有 {} 条 trailing assistant message，折叠为该消息",
             trailing_assistant_messages.len()
         );
-        eprintln!("{msg}");
         diagnostics.push(msg);
         trailing_assistant_messages
     }

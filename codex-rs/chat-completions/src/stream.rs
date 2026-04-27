@@ -91,6 +91,35 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     let status = response.status();
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
+        // When DeepSeek returns reasoning_content errors, dump the request body
+        // for diagnosis. Write to a timestamped file under codex home.
+        if status.as_u16() == 400 && body_text.contains("reasoning_content") {
+            let home = std::env::var("CODEX_HOME")
+                .ok()
+                .map(std::path::PathBuf::from)
+                .or_else(|| {
+                    std::env::var("HOME")
+                        .ok()
+                        .map(|h| std::path::PathBuf::from(h).join(".codex"))
+                })
+                .unwrap_or_else(std::env::temp_dir);
+            let dump_dir = home.join("diagnostics");
+            let _ = std::fs::create_dir_all(&dump_dir);
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            let dump_path = dump_dir.join(format!("reasoning_400_{ts}.json"));
+            if let Ok(json) = serde_json::to_string_pretty(&body) {
+                let _ = std::fs::write(&dump_path, &json);
+                let msg = format!(
+                    "chat completions returned {status}: {body_text}\n\
+                     Request body dumped to: {}",
+                    dump_path.display()
+                );
+                return Err(ApiError::Stream(msg));
+            }
+        }
         return Err(ApiError::Stream(format!(
             "chat completions returned {status}: {body_text}"
         )));
@@ -325,12 +354,10 @@ async fn process_chat_sse(
                         if !pending_tool_calls.is_empty() && accumulated_reasoning.is_empty() {
                             let names: Vec<&str> =
                                 pending_tool_calls.iter().map(|tc| tc.name.as_str()).collect();
-                            let msg = format!(
+                            warn!(
                                 "[reasoning_content] process_chat_sse: 模型返回了 {} 个 tool_call ({names:?})，但 reasoning_content 为空",
                                 pending_tool_calls.len()
                             );
-                            warn!("{msg}");
-                            eprintln!("{msg}");
                         }
                         for tc in &pending_tool_calls {
                             let item = ResponseItem::FunctionCall {
