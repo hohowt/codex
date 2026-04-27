@@ -6,6 +6,7 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use serde_json::Value;
 use serde_json::json;
+use tracing::warn;
 
 /// Builds a Chat Completions API request body from a Responses API request.
 pub fn build_chat_request(
@@ -252,20 +253,34 @@ pub fn build_chat_request(
     // reasoning_content when thinking mode is active. DeepSeek requires
     // reasoning_content on every tool-call turn in all subsequent requests.
     if reasoning_effort.is_some() {
-        for msg in &mut messages {
+        let mut stripped_count = 0usize;
+        for (i, msg) in messages.iter_mut().enumerate() {
             if msg.get("role").and_then(Value::as_str) == Some("assistant")
                 && msg.get("tool_calls").is_some()
                 && msg.get("reasoning_content").is_none()
             {
                 // Remove tool_calls from this message to avoid a 400 error,
                 // and set content to a placeholder if it was null.
+                let tool_count = msg
+                    .get("tool_calls")
+                    .and_then(|tc| tc.as_array())
+                    .map_or(0, |arr| arr.len());
                 msg.as_object_mut().unwrap().remove("tool_calls");
                 if msg.get("content").and_then(Value::as_str) == Some("null")
                     || msg.get("content").is_none()
                 {
                     msg["content"] = json!("");
                 }
+                stripped_count += 1;
+                warn!(
+                    "[reasoning_content] build_chat_request 防御性移除: 消息 #{i} 含 {tool_count} 个 tool_call 但无 reasoning_content"
+                );
             }
+        }
+        if stripped_count > 0 {
+            warn!(
+                "[reasoning_content] build_chat_request: 共移除 {stripped_count} 条无 reasoning 的 tool_call 消息"
+            );
         }
     }
 
@@ -351,6 +366,10 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
         return segment.to_vec();
     }
 
+    warn!(
+        "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call，"
+    );
+
     let Some(last_tool_activity_index) = last_tool_activity_index else {
         return segment.to_vec();
     };
@@ -365,6 +384,9 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
         // No trailing assistant messages to keep as context for this turn.
         // Strip tool calls and outputs that lack reasoning_content to avoid
         // DeepSeek 400: "reasoning_content must be passed back to the API".
+        warn!(
+            "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs"
+        );
         segment
             .iter()
             .filter(|item| {
@@ -381,6 +403,10 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
             .cloned()
             .collect()
     } else {
+        warn!(
+            "[reasoning_content] sanitize_model_turn_segment: 有 {} 条 trailing assistant message，折叠为该消息",
+            trailing_assistant_messages.len()
+        );
         trailing_assistant_messages
     }
 }

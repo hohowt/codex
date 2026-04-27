@@ -19,6 +19,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tracing::debug;
 use tracing::trace;
+use tracing::warn;
 
 /// Streams a Chat Completions request, translating from Responses API types.
 ///
@@ -316,6 +317,14 @@ async fn process_chat_sse(
                         }
 
                         // Emit tool calls.
+                        if !pending_tool_calls.is_empty() && accumulated_reasoning.is_empty() {
+                            let names: Vec<&str> =
+                                pending_tool_calls.iter().map(|tc| tc.name.as_str()).collect();
+                            warn!(
+                                "[reasoning_content] process_chat_sse: 模型返回了 {} 个 tool_call ({names:?})，但 reasoning_content 为空",
+                                pending_tool_calls.len()
+                            );
+                        }
                         for tc in &pending_tool_calls {
                             let item = ResponseItem::FunctionCall {
                                 id: None,
