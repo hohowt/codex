@@ -39,10 +39,10 @@ mod tests {
     fn prepare_realtime_backend_prompt_prefers_config_override() {
         assert_eq!(
             prepare_realtime_backend_prompt(
-                Some(Some("prompt from request".to_string())),
-                Some("prompt from config".to_string()),
+                Some(Some("来自请求的提示".to_string())),
+                Some("来自配置的提示".to_string()),
             ),
-            "prompt from config"
+            "来自配置的提示"
         );
     }
 
@@ -50,10 +50,10 @@ mod tests {
     fn prepare_realtime_backend_prompt_uses_request_prompt() {
         assert_eq!(
             prepare_realtime_backend_prompt(
-                Some(Some("prompt from request".to_string())),
+                Some(Some("来自请求的提示".to_string())),
                 /*config_prompt*/ None,
             ),
-            "prompt from request"
+            "来自请求的提示"
         );
     }
 
@@ -74,8 +74,8 @@ mod tests {
         let prompt =
             prepare_realtime_backend_prompt(/*prompt*/ None, /*config_prompt*/ None);
 
-        assert!(prompt.starts_with("You are Codex, an OpenAI Coding Agent"));
-        assert!(prompt.contains("The user's name is "));
+        assert!(prompt.starts_with("你是 Codex，一个 OpenAI 编码 Agent"));
+        assert!(prompt.contains("用户的名字是 "));
         assert!(!prompt.contains("{{ user_first_name }}"));
     }
 }

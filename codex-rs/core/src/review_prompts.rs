@@ -12,10 +12,10 @@ pub struct ResolvedReviewRequest {
     pub user_facing_hint: String,
 }
 
-const UNCOMMITTED_PROMPT: &str = "Review the current code changes (staged, unstaged, and untracked files) and provide prioritized findings.";
+const UNCOMMITTED_PROMPT: &str = "审查当前的代码变更（已暂存、未暂存和未跟踪的文件）并提供优先级排列的发现。";
 
-const BASE_BRANCH_PROMPT_BACKUP: &str = "Review the code changes against the base branch '{{branch}}'. Start by finding the merge diff between the current branch and {{branch}}'s upstream e.g. (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"{{branch}}@{upstream}\")\"`), then run `git diff` against that SHA to see what changes we would merge into the {{branch}} branch. Provide prioritized, actionable findings.";
-const BASE_BRANCH_PROMPT: &str = "Review the code changes against the base branch '{{base_branch}}'. The merge base commit for this comparison is {{merge_base_sha}}. Run `git diff {{merge_base_sha}}` to inspect the changes relative to {{base_branch}}. Provide prioritized, actionable findings.";
+const BASE_BRANCH_PROMPT_BACKUP: &str = "审查相对于基准分支 '{{branch}}' 的代码变更。首先找到当前分支与 {{branch}} 的上游之间的合并差异，例如 (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"{{branch}}@{upstream}\")\"`)，然后对该 SHA 运行 `git diff` 以查看我们将合并到 {{branch}} 分支的变更。提供优先级排列的、可操作的发现。";
+const BASE_BRANCH_PROMPT: &str = "审查相对于基准分支 '{{base_branch}}' 的代码变更。此比较的合并基准提交是 {{merge_base_sha}}。运行 `git diff {{merge_base_sha}}` 以检查相对于 {{base_branch}} 的变更。提供优先级排列的、可操作的发现。";
 static BASE_BRANCH_PROMPT_BACKUP_TEMPLATE: LazyLock<Template> = LazyLock::new(|| {
     Template::parse(BASE_BRANCH_PROMPT_BACKUP)
         .unwrap_or_else(|err| panic!("base branch backup review prompt must parse: {err}"))
@@ -25,8 +25,8 @@ static BASE_BRANCH_PROMPT_TEMPLATE: LazyLock<Template> = LazyLock::new(|| {
         .unwrap_or_else(|err| panic!("base branch review prompt must parse: {err}"))
 });
 
-const COMMIT_PROMPT_WITH_TITLE: &str = "Review the code changes introduced by commit {{sha}} (\"{{title}}\"). Provide prioritized, actionable findings.";
-const COMMIT_PROMPT: &str = "Review the code changes introduced by commit {{sha}}. Provide prioritized, actionable findings.";
+const COMMIT_PROMPT_WITH_TITLE: &str = "审查提交 {{sha}}（\"{{title}}\"）引入的代码变更。提供优先级排列的、可操作的发现。";
+const COMMIT_PROMPT: &str = "审查提交 {{sha}} 引入的代码变更。提供优先级排列的、可操作的发现。";
 static COMMIT_PROMPT_WITH_TITLE_TEMPLATE: LazyLock<Template> = LazyLock::new(|| {
     Template::parse(COMMIT_PROMPT_WITH_TITLE)
         .unwrap_or_else(|err| panic!("commit review prompt with title must parse: {err}"))
@@ -88,7 +88,7 @@ pub fn review_prompt(target: &ReviewTarget, cwd: &Path) -> anyhow::Result<String
         ReviewTarget::Custom { instructions } => {
             let prompt = instructions.trim();
             if prompt.is_empty() {
-                anyhow::bail!("Review prompt cannot be empty");
+                anyhow::bail!("审查提示不能为空");
             }
             Ok(prompt.to_string())
         }
@@ -106,14 +106,14 @@ fn render_review_prompt<'a, const N: usize>(
 
 pub fn user_facing_hint(target: &ReviewTarget) -> String {
     match target {
-        ReviewTarget::UncommittedChanges => "current changes".to_string(),
-        ReviewTarget::BaseBranch { branch } => format!("changes against '{branch}'"),
+        ReviewTarget::UncommittedChanges => "当前变更".to_string(),
+        ReviewTarget::BaseBranch { branch } => format!("相对于 '{branch}' 的变更"),
         ReviewTarget::Commit { sha, title } => {
             let short_sha: String = sha.chars().take(7).collect();
             if let Some(title) = title {
-                format!("commit {short_sha}: {title}")
+                format!("提交 {short_sha}: {title}")
             } else {
-                format!("commit {short_sha}")
+                format!("提交 {short_sha}")
             }
         }
         ReviewTarget::Custom { instructions } => instructions.trim().to_string(),
@@ -138,7 +138,7 @@ mod tests {
     fn review_prompt_template_renders_base_branch_backup_variant() {
         assert_eq!(
             render_review_prompt(&BASE_BRANCH_PROMPT_BACKUP_TEMPLATE, [("branch", "main")]),
-            "Review the code changes against the base branch 'main'. Start by finding the merge diff between the current branch and main's upstream e.g. (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"main@{upstream}\")\"`), then run `git diff` against that SHA to see what changes we would merge into the main branch. Provide prioritized, actionable findings."
+            "审查相对于基准分支 'main' 的代码变更。首先找到当前分支与 main 的上游之间的合并差异，例如 (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"main@{upstream}\")\"`)，然后对该 SHA 运行 `git diff` 以查看我们将合并到 main 分支的变更。提供优先级排列的、可操作的发现。"
         );
     }
 
@@ -149,7 +149,7 @@ mod tests {
                 &BASE_BRANCH_PROMPT_TEMPLATE,
                 [("base_branch", "main"), ("merge_base_sha", "abc123")]
             ),
-            "Review the code changes against the base branch 'main'. The merge base commit for this comparison is abc123. Run `git diff abc123` to inspect the changes relative to main. Provide prioritized, actionable findings."
+            "审查相对于基准分支 'main' 的代码变更。此比较的合并基准提交是 abc123。运行 `git diff abc123` 以检查相对于 main 的变更。提供优先级排列的、可操作的发现。"
         );
     }
 
@@ -164,7 +164,7 @@ mod tests {
                 Path::new("."),
             )
             .expect("commit prompt should render"),
-            "Review the code changes introduced by commit deadbeef. Provide prioritized, actionable findings."
+            "审查提交 deadbeef 引入的代码变更。提供优先级排列的、可操作的发现。"
         );
     }
 
@@ -179,7 +179,7 @@ mod tests {
                 Path::new("."),
             )
             .expect("commit prompt should render"),
-            "Review the code changes introduced by commit deadbeef (\"Fix bug\"). Provide prioritized, actionable findings."
+            "审查提交 deadbeef（\"Fix bug\"）引入的代码变更。提供优先级排列的、可操作的发现。"
         );
     }
 }

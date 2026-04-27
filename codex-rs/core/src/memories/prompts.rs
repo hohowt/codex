@@ -48,30 +48,25 @@ static MEMORY_EXTENSIONS_PRIMARY_INPUTS_TEMPLATE: LazyLock<Template> = LazyLock:
 fn parse_embedded_template(source: &'static str, template_name: &str) -> Template {
     match Template::parse(source) {
         Ok(template) => template,
-        Err(err) => panic!("embedded template {template_name} is invalid: {err}"),
+        Err(err) => panic!("内嵌模板 {template_name} 无效: {err}"),
     }
 }
 
 const MEMORY_EXTENSIONS_FOLDER_STRUCTURE: &str = r#"
-Memory extensions (under {{ memory_extensions_root }}/):
+记忆扩展（在 {{ memory_extensions_root }}/ 下）：
 
 - <extension_name>/instructions.md
-  - Source-specific guidance for interpreting additional memory signals. If an
-    extension folder exists, you must read its instructions.md to determine how to use this memory
-    source.
+  - 用于解读额外记忆信号的源特定指导。如果存在扩展文件夹，你必须阅读其 instructions.md 来确定如何使用此记忆源。
 
-If the user has any memory extensions, you MUST read the instructions for each extension to
-determine how to use the memory source. If it has no extension folders, continue with the standard
-memory inputs only.
+如果用户有任何记忆扩展，你必须阅读每个扩展的指令来确定如何使用记忆源。如果没有扩展文件夹，仅使用标准记忆输入继续。
 "#;
 
 const MEMORY_EXTENSIONS_PRIMARY_INPUTS: &str = r#"
-Optional source-specific inputs:
-Under `{{ memory_extensions_root }}/`:
+可选的源特定输入：
+在 `{{ memory_extensions_root }}/` 下：
 
 - `<extension_name>/instructions.md`
-  - If extension folders exist, read each instructions.md first and follow it when interpreting
-    that extension's memory source.
+  - 如果扩展文件夹存在，首先读取每个 instructions.md，并在解读该扩展的记忆源时遵循它。
 "#;
 
 /// Builds the consolidation subagent prompt for a specific memory root.
@@ -114,9 +109,9 @@ pub(super) fn build_consolidation_prompt(
             ("phase2_input_selection", phase2_input_selection.as_str()),
         ])
         .unwrap_or_else(|err| {
-            warn!("failed to render memories consolidation prompt template: {err}");
+            warn!("渲染记忆合并提示模板失败: {err}");
             format!(
-                "## Memory Phase 2 (Consolidation)\nConsolidate Codex memories in: {memory_root}\n\n{phase2_input_selection}"
+                "## 记忆 Phase 2（合并）\n在以下位置合并 Codex 记忆: {memory_root}\n\n{phase2_input_selection}"
             )
         })
 }
@@ -125,7 +120,7 @@ fn render_memory_extensions_block(template: &Template, memory_extensions_root: &
     template
         .render([("memory_extensions_root", memory_extensions_root)])
         .unwrap_or_else(|err| {
-            warn!("failed to render memories extension prompt block: {err}");
+            warn!("渲染记忆扩展提示块失败: {err}");
             String::new()
         })
 }
@@ -134,7 +129,7 @@ fn render_phase2_input_selection(selection: &Phase2InputSelection) -> String {
     let retained = selection.retained_thread_ids.len();
     let added = selection.selected.len().saturating_sub(retained);
     let selected = if selection.selected.is_empty() {
-        "- none".to_string()
+        "- 无".to_string()
     } else {
         selection
             .selected
@@ -149,7 +144,7 @@ fn render_phase2_input_selection(selection: &Phase2InputSelection) -> String {
             .join("\n")
     };
     let removed = if selection.removed.is_empty() {
-        "- none".to_string()
+        "- 无".to_string()
     } else {
         selection
             .removed
@@ -160,14 +155,14 @@ fn render_phase2_input_selection(selection: &Phase2InputSelection) -> String {
     };
 
     format!(
-        "- selected inputs this run: {}\n- newly added since the last successful Phase 2 run: {added}\n- retained from the last successful Phase 2 run: {retained}\n- removed from the last successful Phase 2 run: {}\n\nCurrent selected Phase 1 inputs:\n{selected}\n\nRemoved from the last successful Phase 2 selection:\n{removed}\n",
+        "- 本次运行选定的输入: {}\n- 自上次成功 Phase 2 运行以来新增: {added}\n- 自上次成功 Phase 2 运行以来保留: {retained}\n- 自上次成功 Phase 2 运行以来移除: {}\n\n当前选定的 Phase 1 输入:\n{selected}\n\n自上次成功 Phase 2 选择中移除:\n{removed}\n",
         selection.selected.len(),
         selection.removed.len(),
     )
 }
 
 fn render_selected_input_line(item: &Stage1Output, retained: bool) -> String {
-    let status = if retained { "retained" } else { "added" };
+    let status = if retained { "保留" } else { "新增" };
     let rollout_summary_file = format!(
         "rollout_summaries/{}.md",
         rollout_summary_file_stem_from_parts(

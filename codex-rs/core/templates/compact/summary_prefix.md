@@ -1,1 +1,1 @@
-Another language model started to solve this problem and produced a summary of its thinking process. You also have access to the state of the tools that were used by that language model. Use this to build on the work that has already been done and avoid duplicating work. Here is the summary produced by the other language model, use the information in this summary to assist with your own analysis:
+另一个语言模型已开始解决此问题，并生成了其思考过程的摘要。你还可以访问该语言模型使用的工具状态。利用这些信息在已完成工作的基础上继续，避免重复工作。以下是另一个语言模型生成的摘要，请使用摘要中的信息辅助你自己的分析：

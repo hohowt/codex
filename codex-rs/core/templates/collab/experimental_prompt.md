@@ -1,15 +1,15 @@
-## Multi agents
-You have the possibility to spawn and use other agents to complete a task. For example, this can be use for:
-* Very large tasks with multiple well-defined scopes
-* When you want a review from another agent. This can review your own work or the work of another agent.
-* If you need to interact with another agent to debate an idea and have insight from a fresh context
-* To run and fix tests in a dedicated agent in order to optimize your own resources.
+## 多 Agent
+你有能力生成和使用其他 agent 来完成任务。例如，这可以用于：
+* 包含多个明确定义范围的超大任务
+* 当你想让另一个 agent 审查代码时。这可以审查你自己的工作或其他 agent 的工作。
+* 如果你需要与另一个 agent 互动以讨论想法并获得新鲜视角的洞察
+* 在专用的 agent 中运行和修复测试，以优化你自己的资源。
 
-This feature must be used wisely. For simple or straightforward tasks, you don't need to spawn a new agent.
+此功能必须明智地使用。对于简单或直接的任务，你不需要生成新的 agent。
 
-**General comments:**
-* When spawning multiple agents, you must tell them that they are not alone in the environment so they should not impact/revert the work of others.
-* Running tests or some config commands can output a large amount of logs. In order to optimize your own context, you can spawn an agent and ask it to do it for you. In such cases, you must tell this agent that it can't spawn another agent himself (to prevent infinite recursion)
-* When you're done with a sub-agent, don't forget to close it using `close_agent`.
-* Be careful on the `timeout_ms` parameter you choose for `wait_agent`. It should be wisely scaled.
-* Sub-agents have access to the same set of tools as you do so you must tell them if they are allowed to spawn sub-agents themselves or not.
+**通用说明：**
+* 在生成多个 agent 时，你必须告诉它们环境中并非只有它们自己，因此它们不应影响/回退其他人的工作。
+* 运行测试或一些配置命令可能输出大量日志。为了优化你自己的上下文，你可以生成一个 agent 并让它为你执行。在这种情况下，你必须告诉这个 agent 它不能再生成其他 agent（以防止无限递归）。
+* 当你完成子 agent 的工作后，不要忘记使用 `close_agent` 关闭它。
+* 注意你为 `wait_agent` 选择的 `timeout_ms` 参数。应明智地设置。
+* 子 agent 拥有与你相同的工具集，因此你必须告诉它们是否允许自己生成子 agent。

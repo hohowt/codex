@@ -71,13 +71,13 @@ async fn build_memory_tool_developer_instructions_renders_embedded_template() {
         .unwrap();
 
     assert!(instructions.contains(&format!(
-        "- {}/memory_summary.md (already provided below; do NOT open again)",
+        "- {}/memory_summary.md（已在下文提供；不要再次打开）",
         memories_dir.display()
     )));
     assert!(instructions.contains("Short memory summary for tests."));
     assert_eq!(
         instructions
-            .matches("========= MEMORY_SUMMARY BEGINS =========")
+            .matches("========= MEMORY_SUMMARY 开始 =========")
             .count(),
         1
     );
