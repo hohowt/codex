@@ -1,4 +1,5 @@
 use codex_protocol::config_types::ReasoningSummary;
+use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelInstructionsVariables;
@@ -171,7 +172,9 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             default_reasoning_summary: ReasoningSummary::Auto,
             support_verbosity: false,
             default_verbosity: None,
-            apply_patch_tool_type: None,
+            // DeepSeek Chat Completions API 仅支持 type: "function" 工具，
+            // Freeform (type: "custom") 会被 convert_tools 丢弃。
+            apply_patch_tool_type: Some(ApplyPatchToolType::Function),
             web_search_tool_type: WebSearchToolType::Text,
             truncation_policy: TruncationPolicyConfig::tokens(10000),
             supports_parallel_tool_calls: true,
@@ -212,7 +215,8 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             default_reasoning_summary: ReasoningSummary::Auto,
             support_verbosity: false,
             default_verbosity: None,
-            apply_patch_tool_type: None,
+            // DeepSeek Chat Completions API 仅支持 type: "function" 工具。
+            apply_patch_tool_type: Some(ApplyPatchToolType::Function),
             web_search_tool_type: WebSearchToolType::Text,
             truncation_policy: TruncationPolicyConfig::tokens(10000),
             supports_parallel_tool_calls: true,
