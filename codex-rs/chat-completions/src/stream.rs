@@ -91,9 +91,9 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     let status = response.status();
     if !status.is_success() {
         let body_text = response.text().await.unwrap_or_default();
-        // When DeepSeek returns reasoning_content errors, dump the request body
-        // for diagnosis. Write to a timestamped file under codex home.
-        if status.as_u16() == 400 && body_text.contains("reasoning_content") {
+        // Dump the request body for diagnosis on any 400 error.
+        // Write to a timestamped file under codex home.
+        if status.as_u16() == 400 {
             let home = std::env::var("CODEX_HOME")
                 .ok()
                 .map(std::path::PathBuf::from)
@@ -109,7 +109,7 @@ pub async fn stream_chat_completions<A: AuthProvider>(
                 .duration_since(std::time::UNIX_EPOCH)
                 .map(|d| d.as_secs())
                 .unwrap_or(0);
-            let dump_path = dump_dir.join(format!("reasoning_400_{ts}.json"));
+            let dump_path = dump_dir.join(format!("bad_request_400_{ts}.json"));
             if let Ok(json) = serde_json::to_string_pretty(&body) {
                 let _ = std::fs::write(&dump_path, &json);
                 let msg = format!(

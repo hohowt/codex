@@ -39,8 +39,14 @@ pub fn build_chat_request(
     }
 
     // Track raw reasoning_content from a Reasoning item so it can be
-    // attached to a subsequent assistant message with tool_calls.
-    let mut pending_reasoning_content: Option<String> = None;
+    // attached to a subsequent assistant message with tool_calls. DeepSeek
+    // requires reasoning_content on *every* tool-call assistant message in
+    // the conversation.  A single model turn may produce multiple groups of
+    // tool_calls (e.g. model returns tool_calls, gets results, and continues
+    // with another tool_calls).  We use turn-level tracking so that the
+    // same reasoning is reused for later tool_call groups when the model
+    // does not produce fresh reasoning for the continuation.
+    let mut turn_reasoning_content: Option<String> = None;
     let mut last_assistant_message_index: Option<usize> = None;
     let mut current_turn_has_tool_calls = false;
 
@@ -82,7 +88,7 @@ pub fn build_chat_request(
                     }
                 } else {
                     // Non-assistant messages break the reasoning→tool_call chain.
-                    pending_reasoning_content = None;
+                    turn_reasoning_content = None;
                     last_assistant_message_index = None;
                     current_turn_has_tool_calls = false;
                     messages.push(json!({
@@ -110,39 +116,39 @@ pub fn build_chat_request(
                 current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
-                    && last.get("tool_calls").is_some()
-                {
-                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
-                    // Attach reasoning_content if not already present.
-                    if last.get("reasoning_content").is_none() {
-                        if let Some(rc) = pending_reasoning_content.take() {
-                            last["reasoning_content"] = json!(rc);
+                        && last.get("tool_calls").is_some()
+                    {
+                        last["tool_calls"].as_array_mut().unwrap().push(tool_call);
+                        // Attach turn-level reasoning if not already present.
+                        if last.get("reasoning_content").is_none() {
+                            if let Some(rc) = turn_reasoning_content.clone() {
+                                last["reasoning_content"] = json!(rc);
+                            }
                         }
-                    }
                 } else if let Some(index) = last_assistant_message_index
                     && let Some(last) = messages.get_mut(index)
-                    && last.get("tool_calls").is_none()
-                {
-                    last["tool_calls"] = json!([tool_call]);
-                    if let Some(rc) = pending_reasoning_content.take() {
-                        last["reasoning_content"] = json!(rc);
-                    }
-                } else {
+                        && last.get("tool_calls").is_none()
+                    {
+                        last["tool_calls"] = json!([tool_call]);
+                        if let Some(rc) = turn_reasoning_content.clone() {
+                            last["reasoning_content"] = json!(rc);
+                        }
+                    } else {
                     let mut msg = json!({
                         "role": "assistant",
                         "content": null,
-                        "tool_calls": [tool_call],
-                    });
-                    if let Some(rc) = pending_reasoning_content.take() {
-                        msg["reasoning_content"] = json!(rc);
-                    }
+                            "tool_calls": [tool_call],
+                        });
+                        if let Some(rc) = turn_reasoning_content.clone() {
+                            msg["reasoning_content"] = json!(rc);
+                        }
                     messages.push(msg);
                 }
                 last_assistant_message_index = None;
             }
             ResponseItem::FunctionCallOutput { call_id, output } => {
-                // Tool output breaks the reasoning→tool_call chain.
-                pending_reasoning_content = None;
+                // Keep turn_reasoning_content so later tool calls in the same
+                // turn can reuse it.  Reset only the per-message tracker.
                 last_assistant_message_index = None;
                 let text = function_output_to_string(output);
                 messages.push(json!({
@@ -172,32 +178,32 @@ pub fn build_chat_request(
                 current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
-                    && last.get("tool_calls").is_some()
-                {
-                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
-                    // Attach reasoning_content if not already present.
-                    if last.get("reasoning_content").is_none() {
-                        if let Some(rc) = pending_reasoning_content.take() {
-                            last["reasoning_content"] = json!(rc);
+                        && last.get("tool_calls").is_some()
+                    {
+                        last["tool_calls"].as_array_mut().unwrap().push(tool_call);
+                        // Attach turn-level reasoning if not already present.
+                        if last.get("reasoning_content").is_none() {
+                            if let Some(rc) = turn_reasoning_content.clone() {
+                                last["reasoning_content"] = json!(rc);
+                            }
                         }
-                    }
                 } else if let Some(index) = last_assistant_message_index
                     && let Some(last) = messages.get_mut(index)
-                    && last.get("tool_calls").is_none()
-                {
-                    last["tool_calls"] = json!([tool_call]);
-                    if let Some(rc) = pending_reasoning_content.take() {
-                        last["reasoning_content"] = json!(rc);
-                    }
-                } else {
+                        && last.get("tool_calls").is_none()
+                    {
+                        last["tool_calls"] = json!([tool_call]);
+                        if let Some(rc) = turn_reasoning_content.clone() {
+                            last["reasoning_content"] = json!(rc);
+                        }
+                    } else {
                     let mut msg = json!({
                         "role": "assistant",
                         "content": null,
-                        "tool_calls": [tool_call],
-                    });
-                    if let Some(rc) = pending_reasoning_content.take() {
-                        msg["reasoning_content"] = json!(rc);
-                    }
+                            "tool_calls": [tool_call],
+                        });
+                        if let Some(rc) = turn_reasoning_content.clone() {
+                            msg["reasoning_content"] = json!(rc);
+                        }
                     messages.push(msg);
                 }
                 last_assistant_message_index = None;
@@ -225,8 +231,9 @@ pub fn build_chat_request(
                             && last.get("reasoning_content").is_none()
                         {
                             last["reasoning_content"] = json!(raw_text);
+                            turn_reasoning_content = Some(raw_text);
                         } else {
-                            pending_reasoning_content = Some(raw_text);
+                            turn_reasoning_content = Some(raw_text);
                         }
                     }
                 }
@@ -257,11 +264,21 @@ pub fn build_chat_request(
     // reasoning_content on every tool-call turn in all subsequent requests.
     if reasoning_effort.is_some() {
         let mut stripped_count = 0usize;
+        let mut stripped_call_ids: Vec<String> = Vec::new();
         for (i, msg) in messages.iter_mut().enumerate() {
             if msg.get("role").and_then(Value::as_str) == Some("assistant")
                 && msg.get("tool_calls").is_some()
                 && msg.get("reasoning_content").is_none()
             {
+                // Collect tool_call_ids before removing them so we can
+                // also drop the corresponding orphaned tool messages.
+                if let Some(tc_array) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
+                    for tc in tc_array {
+                        if let Some(id) = tc.get("id").and_then(Value::as_str) {
+                            stripped_call_ids.push(id.to_string());
+                        }
+                    }
+                }
                 // Remove tool_calls from this message to avoid a 400 error,
                 // and set content to a placeholder if it was null.
                 let tool_count = msg
@@ -285,6 +302,29 @@ pub fn build_chat_request(
         if stripped_count > 0 {
             let msg = format!(
                 "[reasoning_content] build_chat_request: 共移除 {stripped_count} 条无 reasoning 的 tool_call 消息"
+            );
+            diagnostics.push(msg);
+        }
+        // Remove tool output messages that reference stripped call_ids to
+        // avoid orphaned tool_call_id references that may confuse the API.
+        let orphan_count = if !stripped_call_ids.is_empty() {
+            let before = messages.len();
+            messages.retain(|msg| {
+                if msg.get("role").and_then(Value::as_str) != Some("tool") {
+                    return true;
+                }
+                let Some(tc_id) = msg.get("tool_call_id").and_then(Value::as_str) else {
+                    return true;
+                };
+                !stripped_call_ids.iter().any(|id| id == tc_id)
+            });
+            before.saturating_sub(messages.len())
+        } else {
+            0
+        };
+        if orphan_count > 0 {
+            let msg = format!(
+                "[reasoning_content] build_chat_request: 额外移除 {orphan_count} 条孤儿 tool output 消息"
             );
             diagnostics.push(msg);
         }
@@ -372,6 +412,10 @@ fn sanitize_model_turn_segment(
             | ResponseItem::CustomToolCallOutput { .. }
             | ResponseItem::ToolSearchOutput { .. } => {
                 last_tool_activity_index = Some(index);
+                // After tool outputs, a new tool_call group in the turn
+                // needs its own reasoning.  Reset so continuation tool
+                // calls without reasoning are detected for self-healing.
+                saw_reasoning_content = false;
             }
             _ => {}
         }
