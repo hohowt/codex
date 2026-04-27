@@ -6,9 +6,11 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use serde_json::Value;
 use serde_json::json;
-use tracing::warn;
 
 /// Builds a Chat Completions API request body from a Responses API request.
+///
+/// `diagnostics` collects warning messages about missing reasoning_content etc.
+/// that the caller should display to the user (e.g. via TUI WarningEvent).
 pub fn build_chat_request(
     model: &str,
     instructions: &str,
@@ -17,11 +19,12 @@ pub fn build_chat_request(
     parallel_tool_calls: bool,
     supports_stream_options: bool,
     reasoning_effort: Option<&str>,
+    diagnostics: &mut Vec<String>,
 ) -> Value {
     let mut messages: Vec<Value> = Vec::new();
     let sanitized_input_storage;
     let input = if reasoning_effort.is_some() {
-        sanitized_input_storage = sanitize_input_for_thinking_tool_replay(input);
+        sanitized_input_storage = sanitize_input_for_thinking_tool_replay(input, diagnostics);
         sanitized_input_storage.as_slice()
     } else {
         input
@@ -272,15 +275,19 @@ pub fn build_chat_request(
                     msg["content"] = json!("");
                 }
                 stripped_count += 1;
-                warn!(
+                let msg = format!(
                     "[reasoning_content] build_chat_request 防御性移除: 消息 #{i} 含 {tool_count} 个 tool_call 但无 reasoning_content"
                 );
+                eprintln!("{msg}");
+                diagnostics.push(msg);
             }
         }
         if stripped_count > 0 {
-            warn!(
+            let msg = format!(
                 "[reasoning_content] build_chat_request: 共移除 {stripped_count} 条无 reasoning 的 tool_call 消息"
             );
+            eprintln!("{msg}");
+            diagnostics.push(msg);
         }
     }
 
@@ -310,13 +317,19 @@ pub fn build_chat_request(
     body
 }
 
-fn sanitize_input_for_thinking_tool_replay(input: &[ResponseItem]) -> Vec<ResponseItem> {
+fn sanitize_input_for_thinking_tool_replay(
+    input: &[ResponseItem],
+    diagnostics: &mut Vec<String>,
+) -> Vec<ResponseItem> {
     let mut sanitized = Vec::new();
     let mut model_turn_segment = Vec::new();
 
     for item in input {
         if is_non_assistant_message(item) {
-            sanitized.extend(sanitize_model_turn_segment(&model_turn_segment));
+            sanitized.extend(sanitize_model_turn_segment(
+                &model_turn_segment,
+                diagnostics,
+            ));
             model_turn_segment.clear();
             sanitized.push(item.clone());
         } else {
@@ -324,11 +337,14 @@ fn sanitize_input_for_thinking_tool_replay(input: &[ResponseItem]) -> Vec<Respon
         }
     }
 
-    sanitized.extend(sanitize_model_turn_segment(&model_turn_segment));
+    sanitized.extend(sanitize_model_turn_segment(&model_turn_segment, diagnostics));
     sanitized
 }
 
-fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
+fn sanitize_model_turn_segment(
+    segment: &[ResponseItem],
+    diagnostics: &mut Vec<String>,
+) -> Vec<ResponseItem> {
     let mut saw_reasoning_content = false;
     let mut saw_tool_call_without_reasoning = false;
     let mut last_tool_activity_index = None;
@@ -366,9 +382,10 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
         return segment.to_vec();
     }
 
-    warn!(
-        "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call，"
-    );
+    let msg =
+        "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call";
+    eprintln!("{msg}");
+    diagnostics.push(msg.to_string());
 
     let Some(last_tool_activity_index) = last_tool_activity_index else {
         return segment.to_vec();
@@ -384,9 +401,10 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
         // No trailing assistant messages to keep as context for this turn.
         // Strip tool calls and outputs that lack reasoning_content to avoid
         // DeepSeek 400: "reasoning_content must be passed back to the API".
-        warn!(
-            "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs"
-        );
+        let msg =
+            "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs";
+        eprintln!("{msg}");
+        diagnostics.push(msg.to_string());
         segment
             .iter()
             .filter(|item| {
@@ -403,10 +421,12 @@ fn sanitize_model_turn_segment(segment: &[ResponseItem]) -> Vec<ResponseItem> {
             .cloned()
             .collect()
     } else {
-        warn!(
+        let msg = format!(
             "[reasoning_content] sanitize_model_turn_segment: 有 {} 条 trailing assistant message，折叠为该消息",
             trailing_assistant_messages.len()
         );
+        eprintln!("{msg}");
+        diagnostics.push(msg);
         trailing_assistant_messages
     }
 }
@@ -472,6 +492,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -502,6 +523,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -542,6 +564,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -588,6 +611,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -636,6 +660,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -697,6 +722,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -751,6 +777,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         assert_eq!(
@@ -821,6 +848,7 @@ mod tests {
             false,
             true,
             Some("high"),
+            &mut Vec::new(),
         );
 
         // Tool calls without reasoning_content are stripped;

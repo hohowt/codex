@@ -46,6 +46,7 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     } else {
         None
     };
+    let mut diagnostics = Vec::new();
     let body = build_chat_request(
         model,
         instructions,
@@ -54,7 +55,11 @@ pub async fn stream_chat_completions<A: AuthProvider>(
         parallel_tool_calls,
         supports_stream_options,
         reasoning_effort.as_deref(),
+        &mut diagnostics,
     );
+    for msg in &diagnostics {
+        warn!("{msg}");
+    }
 
     let url = provider.url_for_path("chat/completions");
     let mut headers = provider.headers.clone();
@@ -320,10 +325,12 @@ async fn process_chat_sse(
                         if !pending_tool_calls.is_empty() && accumulated_reasoning.is_empty() {
                             let names: Vec<&str> =
                                 pending_tool_calls.iter().map(|tc| tc.name.as_str()).collect();
-                            warn!(
+                            let msg = format!(
                                 "[reasoning_content] process_chat_sse: 模型返回了 {} 个 tool_call ({names:?})，但 reasoning_content 为空",
                                 pending_tool_calls.len()
                             );
+                            warn!("{msg}");
+                            eprintln!("{msg}");
                         }
                         for tc in &pending_tool_calls {
                             let item = ResponseItem::FunctionCall {
