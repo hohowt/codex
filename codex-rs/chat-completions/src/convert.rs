@@ -248,6 +248,27 @@ pub fn build_chat_request(
         }
     }
 
+    // Defensive: strip any assistant message that has tool_calls but no
+    // reasoning_content when thinking mode is active. DeepSeek requires
+    // reasoning_content on every tool-call turn in all subsequent requests.
+    if reasoning_effort.is_some() {
+        for msg in &mut messages {
+            if msg.get("role").and_then(Value::as_str) == Some("assistant")
+                && msg.get("tool_calls").is_some()
+                && msg.get("reasoning_content").is_none()
+            {
+                // Remove tool_calls from this message to avoid a 400 error,
+                // and set content to a placeholder if it was null.
+                msg.as_object_mut().unwrap().remove("tool_calls");
+                if msg.get("content").and_then(Value::as_str) == Some("null")
+                    || msg.get("content").is_none()
+                {
+                    msg["content"] = json!("");
+                }
+            }
+        }
+    }
+
     let mut body = json!({
         "model": model,
         "messages": messages,
