@@ -17,11 +17,12 @@ concurrency:
 
 jobs:
   build:
+    needs: [release]
     name: Build - ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 120
     permissions:
-      contents: read
+      contents: write
     defaults:
       run:
         working-directory: codex-rs
@@ -174,12 +175,19 @@ jobs:
           path: |
             codex-rs/dist/${{ matrix.target }}/*
 
+      - name: Upload to Release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: codex-rs/dist/${{ matrix.target }}/*
+
   build-windows:
+    needs: [release]
     name: Build - x86_64-pc-windows-msvc
     runs-on: windows-latest
     timeout-minutes: 120
     permissions:
-      contents: read
+      contents: write
     defaults:
       run:
         working-directory: codex-rs
@@ -219,19 +227,32 @@ jobs:
           path: |
             codex-rs/dist/x86_64-pc-windows-msvc/*
 
+      - name: Upload to Release
+        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: codex-rs/dist/x86_64-pc-windows-msvc/*
+
+  # Create the release immediately so each build can upload artifacts
+  # as soon as it finishes, without waiting for other builds.
   release:
-    needs:
-      - build
-      - build-windows
-    name: release
+    name: Create Release
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
+    outputs:
+      version: ${{ steps.release_name.outputs.name }}
+      notes_path: ${{ steps.release_notes.outputs.path }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Define release name
+        id: release_name
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          echo "name=${version}" >> "$GITHUB_OUTPUT"
 
       - name: Generate release notes from tag commit message
         id: release_notes
@@ -244,30 +265,10 @@ jobs:
           echo >> "${notes_path}"
           echo "path=${notes_path}" >> "${GITHUB_OUTPUT}"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: dist
-
-      - name: List
-        run: ls -R dist/
-
-      - name: Clean up dist
-        run: |
-          find dist -type f -name 'cargo-timing.html' -delete
-          find dist -type d -empty -delete
-          ls -R dist/
-
-      - name: Define release name
-        id: release_name
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          echo "name=${version}" >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           name: ${{ steps.release_name.outputs.name }}
           tag_name: ${{ github.ref_name }}
           body_path: ${{ steps.release_notes.outputs.path }}
-          files: dist/**
           prerelease: ${{ contains(steps.release_name.outputs.name, '-') }}
