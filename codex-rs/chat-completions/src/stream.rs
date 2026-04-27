@@ -100,7 +100,7 @@ pub async fn stream_chat_completions<A: AuthProvider>(
                 .or_else(|| {
                     std::env::var("HOME")
                         .ok()
-                        .map(|h| std::path::PathBuf::from(h).join(".codex"))
+                        .map(|h| std::path::PathBuf::from(h).join(".codex-moon"))
                 })
                 .unwrap_or_else(std::env::temp_dir);
             let dump_dir = home.join("diagnostics");
