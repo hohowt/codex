@@ -116,32 +116,32 @@ pub fn build_chat_request(
                 current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
-                        && last.get("tool_calls").is_some()
-                    {
-                        last["tool_calls"].as_array_mut().unwrap().push(tool_call);
-                        // Attach turn-level reasoning if not already present.
-                        if last.get("reasoning_content").is_none() {
-                            if let Some(rc) = turn_reasoning_content.clone() {
-                                last["reasoning_content"] = json!(rc);
-                            }
-                        }
-                } else if let Some(index) = last_assistant_message_index
-                    && let Some(last) = messages.get_mut(index)
-                        && last.get("tool_calls").is_none()
-                    {
-                        last["tool_calls"] = json!([tool_call]);
+                    && last.get("tool_calls").is_some()
+                {
+                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
+                    // Attach turn-level reasoning if not already present.
+                    if last.get("reasoning_content").is_none() {
                         if let Some(rc) = turn_reasoning_content.clone() {
                             last["reasoning_content"] = json!(rc);
                         }
-                    } else {
+                    }
+                } else if let Some(index) = last_assistant_message_index
+                    && let Some(last) = messages.get_mut(index)
+                    && last.get("tool_calls").is_none()
+                {
+                    last["tool_calls"] = json!([tool_call]);
+                    if let Some(rc) = turn_reasoning_content.clone() {
+                        last["reasoning_content"] = json!(rc);
+                    }
+                } else {
                     let mut msg = json!({
-                        "role": "assistant",
-                        "content": null,
-                            "tool_calls": [tool_call],
-                        });
-                        if let Some(rc) = turn_reasoning_content.clone() {
-                            msg["reasoning_content"] = json!(rc);
-                        }
+                    "role": "assistant",
+                    "content": null,
+                        "tool_calls": [tool_call],
+                    });
+                    if let Some(rc) = turn_reasoning_content.clone() {
+                        msg["reasoning_content"] = json!(rc);
+                    }
                     messages.push(msg);
                 }
                 last_assistant_message_index = None;
@@ -178,32 +178,32 @@ pub fn build_chat_request(
                 current_turn_has_tool_calls = true;
                 if let Some(last) = messages.last_mut()
                     && last.get("role").and_then(Value::as_str) == Some("assistant")
-                        && last.get("tool_calls").is_some()
-                    {
-                        last["tool_calls"].as_array_mut().unwrap().push(tool_call);
-                        // Attach turn-level reasoning if not already present.
-                        if last.get("reasoning_content").is_none() {
-                            if let Some(rc) = turn_reasoning_content.clone() {
-                                last["reasoning_content"] = json!(rc);
-                            }
-                        }
-                } else if let Some(index) = last_assistant_message_index
-                    && let Some(last) = messages.get_mut(index)
-                        && last.get("tool_calls").is_none()
-                    {
-                        last["tool_calls"] = json!([tool_call]);
+                    && last.get("tool_calls").is_some()
+                {
+                    last["tool_calls"].as_array_mut().unwrap().push(tool_call);
+                    // Attach turn-level reasoning if not already present.
+                    if last.get("reasoning_content").is_none() {
                         if let Some(rc) = turn_reasoning_content.clone() {
                             last["reasoning_content"] = json!(rc);
                         }
-                    } else {
+                    }
+                } else if let Some(index) = last_assistant_message_index
+                    && let Some(last) = messages.get_mut(index)
+                    && last.get("tool_calls").is_none()
+                {
+                    last["tool_calls"] = json!([tool_call]);
+                    if let Some(rc) = turn_reasoning_content.clone() {
+                        last["reasoning_content"] = json!(rc);
+                    }
+                } else {
                     let mut msg = json!({
-                        "role": "assistant",
-                        "content": null,
-                            "tool_calls": [tool_call],
-                        });
-                        if let Some(rc) = turn_reasoning_content.clone() {
-                            msg["reasoning_content"] = json!(rc);
-                        }
+                    "role": "assistant",
+                    "content": null,
+                        "tool_calls": [tool_call],
+                    });
+                    if let Some(rc) = turn_reasoning_content.clone() {
+                        msg["reasoning_content"] = json!(rc);
+                    }
                     messages.push(msg);
                 }
                 last_assistant_message_index = None;
@@ -376,7 +376,10 @@ fn sanitize_input_for_thinking_tool_replay(
         }
     }
 
-    sanitized.extend(sanitize_model_turn_segment(&model_turn_segment, diagnostics));
+    sanitized.extend(sanitize_model_turn_segment(
+        &model_turn_segment,
+        diagnostics,
+    ));
     sanitized
 }
 
@@ -425,8 +428,7 @@ fn sanitize_model_turn_segment(
         return segment.to_vec();
     }
 
-    let msg =
-        "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call";
+    let msg = "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call";
     diagnostics.push(msg.to_string());
 
     let Some(last_tool_activity_index) = last_tool_activity_index else {
@@ -443,8 +445,7 @@ fn sanitize_model_turn_segment(
         // No trailing assistant messages to keep as context for this turn.
         // Strip tool calls and outputs that lack reasoning_content to avoid
         // DeepSeek 400: "reasoning_content must be passed back to the API".
-        let msg =
-            "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs";
+        let msg = "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs";
         diagnostics.push(msg.to_string());
         segment
             .iter()
