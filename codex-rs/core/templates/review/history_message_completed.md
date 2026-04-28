@@ -1,5 +1,5 @@
 <user_action>
-  <context>User initiated a review task. Here's the full review output from reviewer model. User may select one or more comments to resolve.</context>
+  <context>用户发起了审查任务。以下是审查模型输出的完整审查结果。用户可以选择一个或多个评论来解决。</context>
   <action>review</action>
   <results>
   {findings}
