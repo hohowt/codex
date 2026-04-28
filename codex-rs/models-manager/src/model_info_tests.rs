@@ -43,3 +43,25 @@ fn reasoning_summaries_override_false_is_noop_when_model_is_false() {
 
     assert_eq!(updated, model);
 }
+
+#[test]
+fn deepseek_builtin_models_default_to_no_thinking() {
+    let models = builtin_provider_models("DeepSeek", Some("https://api.deepseek.com/v1"));
+    let slugs = models
+        .iter()
+        .map(|model| (model.slug.as_str(), model.default_reasoning_level))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        slugs,
+        vec![
+            ("deepseek-v4-pro", Some(ReasoningEffort::None)),
+            ("deepseek-v4-flash", Some(ReasoningEffort::None)),
+        ]
+    );
+    assert!(
+        models
+            .iter()
+            .all(|model| model.base_instructions.contains("DeepSeek V4"))
+    );
+}

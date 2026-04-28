@@ -92,6 +92,7 @@ use tokio::sync::oneshot;
 use tokio::sync::oneshot::error::TryRecvError;
 use tokio_tungstenite::tungstenite::Error;
 use tokio_tungstenite::tungstenite::Message;
+use tracing::info;
 use tracing::instrument;
 use tracing::trace;
 use tracing::warn;
@@ -1506,18 +1507,22 @@ impl ModelClientSession {
         let input = prompt.get_formatted_input();
 
         // Map Responses API reasoning to DeepSeek V4 thinking/reasoning_effort.
-        // DeepSeek V4 supports: "high" (default for normal requests) and "max" (for Agent tasks).
-        // OpenAI efforts "low"/"medium" → "high", "xhigh" → "max".
-        let reasoning_effort = if model_info.supports_reasoning_summaries {
-            let effort = effort.or(model_info.default_reasoning_level);
-            match effort {
-                Some(ReasoningEffortConfig::XHigh) => Some("max".to_string()),
-                Some(_) => Some("high".to_string()),
-                None => Some("max".to_string()),
-            }
-        } else {
-            None
-        };
+        // Omitted effort means no thinking mode. When thinking is enabled,
+        // this compatibility path maps to DeepSeek's "high"/"max" tiers.
+        let selected_effort = effort.or(model_info.default_reasoning_level);
+        let reasoning_effort = deepseek_chat_reasoning_effort(
+            model_info.supports_reasoning_summaries,
+            selected_effort,
+        );
+        info!(
+            model = %model_info.slug,
+            ?selected_effort,
+            mapped_reasoning_effort = reasoning_effort.as_deref().unwrap_or("none"),
+            input_items = input.len(),
+            tool_count = tools.len(),
+            parallel_tool_calls = prompt.parallel_tool_calls,
+            "streaming chat-completions request"
+        );
 
         let api_stream = codex_chat_completions::stream_chat_completions(
             transport,
@@ -1536,6 +1541,21 @@ impl ModelClientSession {
 
         let (stream, _) = map_response_stream(api_stream, session_telemetry.clone());
         Ok(stream)
+    }
+
+    fn deepseek_chat_reasoning_effort(
+        supports_reasoning_summaries: bool,
+        effort: Option<ReasoningEffortConfig>,
+    ) -> Option<String> {
+        if !supports_reasoning_summaries {
+            return None;
+        }
+
+        match effort {
+            Some(ReasoningEffortConfig::None) | None => None,
+            Some(ReasoningEffortConfig::XHigh) => Some("max".to_string()),
+            Some(_) => Some("high".to_string()),
+        }
     }
 
     /// Permanently disables WebSockets for this Codex session and resets WebSocket state.

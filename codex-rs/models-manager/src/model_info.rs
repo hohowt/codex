@@ -17,6 +17,7 @@ use codex_utils_output_truncation::approx_bytes_for_tokens;
 use tracing::warn;
 
 pub const BASE_INSTRUCTIONS: &str = include_str!("../prompt.md");
+const DEEPSEEK_BASE_INSTRUCTIONS: &str = include_str!("../deepseek_prompt.md");
 const DEFAULT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
 const LOCAL_FRIENDLY_TEMPLATE: &str =
     "You optimize for team morale and being a supportive teammate as much as code quality.";
@@ -147,16 +148,22 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
         ModelInfo {
             slug: "deepseek-v4-pro".to_string(),
             display_name: "DeepSeek-V4-Pro".to_string(),
-            description: Some("DeepSeek V4 flagship — 1M context, pensar mode".to_string()),
-            default_reasoning_level: Some(ReasoningEffort::XHigh),
+            description: Some(
+                "DeepSeek V4 flagship — 1M context, optimized for agent coding".to_string(),
+            ),
+            default_reasoning_level: Some(ReasoningEffort::None),
             supported_reasoning_levels: vec![
                 ReasoningEffortPreset {
+                    effort: ReasoningEffort::None,
+                    description: "None - no thinking mode for fastest execution".to_string(),
+                },
+                ReasoningEffortPreset {
                     effort: ReasoningEffort::High,
-                    description: "High — default for normal requests".to_string(),
+                    description: "High - enable thinking for harder tasks".to_string(),
                 },
                 ReasoningEffortPreset {
                     effort: ReasoningEffort::XHigh,
-                    description: "Max — for complex Agent tasks".to_string(),
+                    description: "Max - deepest thinking for complex agent tasks".to_string(),
                 },
             ],
             shell_type: ConfigShellToolType::Default,
@@ -166,7 +173,7 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             additional_speed_tiers: Vec::new(),
             availability_nux: None,
             upgrade: None,
-            base_instructions: BASE_INSTRUCTIONS.to_string(),
+            base_instructions: DEEPSEEK_BASE_INSTRUCTIONS.to_string(),
             model_messages: None,
             supports_reasoning_summaries: true,
             default_reasoning_summary: ReasoningSummary::Auto,
@@ -191,15 +198,19 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             slug: "deepseek-v4-flash".to_string(),
             display_name: "DeepSeek-V4-Flash".to_string(),
             description: Some("DeepSeek V4 fast model — 1M context, cost-effective".to_string()),
-            default_reasoning_level: Some(ReasoningEffort::High),
+            default_reasoning_level: Some(ReasoningEffort::None),
             supported_reasoning_levels: vec![
                 ReasoningEffortPreset {
+                    effort: ReasoningEffort::None,
+                    description: "None - no thinking mode for lowest latency".to_string(),
+                },
+                ReasoningEffortPreset {
                     effort: ReasoningEffort::High,
-                    description: "High — default for normal requests".to_string(),
+                    description: "High - enable thinking for harder tasks".to_string(),
                 },
                 ReasoningEffortPreset {
                     effort: ReasoningEffort::XHigh,
-                    description: "Max — for complex Agent tasks".to_string(),
+                    description: "Max - deepest thinking for complex agent tasks".to_string(),
                 },
             ],
             shell_type: ConfigShellToolType::Default,
@@ -209,7 +220,7 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             additional_speed_tiers: Vec::new(),
             availability_nux: None,
             upgrade: None,
-            base_instructions: BASE_INSTRUCTIONS.to_string(),
+            base_instructions: DEEPSEEK_BASE_INSTRUCTIONS.to_string(),
             model_messages: None,
             supports_reasoning_summaries: true,
             default_reasoning_summary: ReasoningSummary::Auto,

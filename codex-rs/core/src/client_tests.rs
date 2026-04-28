@@ -14,6 +14,7 @@ use codex_model_provider_info::create_oss_provider_with_base_url;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_protocol::openai_models::ModelInfo;
+use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
@@ -168,4 +169,38 @@ fn auth_request_telemetry_context_tracks_attached_auth_and_retry_phase() {
     assert!(auth_context.retry_after_unauthorized);
     assert_eq!(auth_context.recovery_mode, Some("managed"));
     assert_eq!(auth_context.recovery_phase, Some("refresh_token"));
+}
+
+#[test]
+fn deepseek_chat_reasoning_effort_omits_thinking_when_unset() {
+    assert_eq!(
+        ModelClientSession::deepseek_chat_reasoning_effort(true, None),
+        None
+    );
+    assert_eq!(
+        ModelClientSession::deepseek_chat_reasoning_effort(true, Some(ReasoningEffortConfig::None),),
+        None
+    );
+}
+
+#[test]
+fn deepseek_chat_reasoning_effort_maps_supported_levels() {
+    assert_eq!(
+        ModelClientSession::deepseek_chat_reasoning_effort(true, Some(ReasoningEffortConfig::High),),
+        Some("high".to_string())
+    );
+    assert_eq!(
+        ModelClientSession::deepseek_chat_reasoning_effort(
+            true,
+            Some(ReasoningEffortConfig::XHigh),
+        ),
+        Some("max".to_string())
+    );
+    assert_eq!(
+        ModelClientSession::deepseek_chat_reasoning_effort(
+            false,
+            Some(ReasoningEffortConfig::High),
+        ),
+        None
+    );
 }
