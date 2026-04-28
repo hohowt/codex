@@ -1510,7 +1510,7 @@ impl ModelClientSession {
         // Omitted effort means no thinking mode. When thinking is enabled,
         // this compatibility path maps to DeepSeek's "high"/"max" tiers.
         let selected_effort = effort.or(model_info.default_reasoning_level);
-        let reasoning_effort = deepseek_chat_reasoning_effort(
+        let reasoning_effort = Self::deepseek_chat_reasoning_effort(
             model_info.supports_reasoning_summaries,
             selected_effort,
         );

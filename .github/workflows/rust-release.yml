@@ -28,8 +28,8 @@ jobs:
         working-directory: codex-rs
     env:
       CARGO_PROFILE_RELEASE_LTO: thin
+      USE_SCCACHE: ${{ matrix.target != 'x86_64-apple-darwin' && 'true' || 'false' }}
       SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: sccache
 
     strategy:
       fail-fast: false
@@ -48,7 +48,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Run sccache-cache
+        if: ${{ env.USE_SCCACHE == 'true' }}
         uses: mozilla-actions/sccache-action@v0.0.10
+
+      - name: Enable sccache wrapper
+        if: ${{ env.USE_SCCACHE == 'true' }}
+        shell: bash
+        run: echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
 
       - name: Install Linux build dependencies
         if: ${{ runner.os == 'Linux' }}
