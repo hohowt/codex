@@ -12,7 +12,8 @@ pub struct ResolvedReviewRequest {
     pub user_facing_hint: String,
 }
 
-const UNCOMMITTED_PROMPT: &str = "审查当前的代码变更（已暂存、未暂存和未跟踪的文件）并提供优先级排列的发现。";
+const UNCOMMITTED_PROMPT: &str =
+    "审查当前的代码变更（已暂存、未暂存和未跟踪的文件）并提供优先级排列的发现。";
 
 const BASE_BRANCH_PROMPT_BACKUP: &str = "审查相对于基准分支 '{{branch}}' 的代码变更。首先找到当前分支与 {{branch}} 的上游之间的合并差异，例如 (`git merge-base HEAD \"$(git rev-parse --abbrev-ref \"{{branch}}@{upstream}\")\"`)，然后对该 SHA 运行 `git diff` 以查看我们将合并到 {{branch}} 分支的变更。提供优先级排列的、可操作的发现。";
 const BASE_BRANCH_PROMPT: &str = "审查相对于基准分支 '{{base_branch}}' 的代码变更。此比较的合并基准提交是 {{merge_base_sha}}。运行 `git diff {{merge_base_sha}}` 以检查相对于 {{base_branch}} 的变更。提供优先级排列的、可操作的发现。";
@@ -25,7 +26,8 @@ static BASE_BRANCH_PROMPT_TEMPLATE: LazyLock<Template> = LazyLock::new(|| {
         .unwrap_or_else(|err| panic!("base branch review prompt must parse: {err}"))
 });
 
-const COMMIT_PROMPT_WITH_TITLE: &str = "审查提交 {{sha}}（\"{{title}}\"）引入的代码变更。提供优先级排列的、可操作的发现。";
+const COMMIT_PROMPT_WITH_TITLE: &str =
+    "审查提交 {{sha}}（\"{{title}}\"）引入的代码变更。提供优先级排列的、可操作的发现。";
 const COMMIT_PROMPT: &str = "审查提交 {{sha}} 引入的代码变更。提供优先级排列的、可操作的发现。";
 static COMMIT_PROMPT_WITH_TITLE_TEMPLATE: LazyLock<Template> = LazyLock::new(|| {
     Template::parse(COMMIT_PROMPT_WITH_TITLE)

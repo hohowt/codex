@@ -171,10 +171,7 @@ pub(crate) async fn build_guardian_prompt_items(
         push_text("重试原因:\n".to_string());
         push_text(format!("{reason}\n\n"));
     }
-    push_text(
-        "评估以下确切的计划操作。当本地状态重要时使用只读工具检查。\n"
-            .to_string(),
-    );
+    push_text("评估以下确切的计划操作。当本地状态重要时使用只读工具检查。\n".to_string());
     push_text("计划操作 JSON:\n".to_string());
     push_text(format!("{planned_action_json}\n"));
     push_text(">>> 审批请求 结束\n".to_string());
