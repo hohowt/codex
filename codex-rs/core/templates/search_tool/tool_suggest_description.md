@@ -1,26 +1,27 @@
-# Tool suggestion discovery
+# 工具建议发现
 
-Suggests a missing connector in an installed plugin, or in narrower cases a not installed but discoverable plugin, when the user clearly wants a capability that is not currently available in the active `tools` list.
+当用户明确需要某个能力但当前激活的 `tools` 列表中不可用时，建议已安装插件中缺失的连接器，或在更狭窄的情况下建议未安装但可发现的插件。
 
-Use this ONLY when:
-- You've already tried to find a matching available tool for the user's request but couldn't find a good match. This includes `tool_search` (if available) and other means.
-- For connectors/apps that are not installed but needed for an installed plugin, suggest to install them if the task requirements match precisely.
-- For plugins that are not installed but discoverable, only suggest discoverable and installable plugins when the user's intent very explicitly and unambiguously matches that plugin itself. Do not suggest a plugin just because one of its connectors or capabilities seems relevant.
+仅当以下情况时使用此功能：
 
-Tool suggestions should only use the discoverable tools listed here. DO NOT explore or recommend tools that are not on this list.
+- 你已经尝试为用户请求找到匹配的可用工具但未找到合适的匹配。这包括 `tool_search`（如果可用）和其他方式。
+- 对于未安装但已安装插件所需连接器/apps，如果任务需求精确匹配，建议安装它们。
+- 对于未安装但可发现的插件，仅当用户意图非常明确且无歧义地匹配该插件本身时，才建议可发现和可安装的插件。不要仅因为某个连接器或功能似乎相关就建议一个插件。
 
-Discoverable tools:
+工具建议只能使用此处列出的可发现工具。不要探索或推荐不在此列表中的工具。
+
+可发现的工具：
 {{discoverable_tools}}
 
-Workflow:
+工作流程：
 
-1. Ensure all possible means have been exhausted to find an existing available tool but none of them matches the request intent.
-2. Match the user's request against the discoverable tools list above. Apply the stricter explicit-and-unambiguous rule for *discoverable tools* like plugin install suggestions; *missing tools* like connector install suggestions continue to use the normal clear-fit standard.
-3. If one tool clearly fits, call `tool_suggest` with:
-   - `tool_type`: `connector` or `plugin`
-   - `action_type`: `install` or `enable`
-   - `tool_id`: exact id from the discoverable tools list above
-   - `suggest_reason`: concise one-line user-facing reason this tool can help with the current request
-4. After the suggestion flow completes:
-   - if the user finished the install or enable flow, continue by searching again or using the newly available tool
-   - if the user did not finish, continue without that tool, and don't suggest that tool again unless the user explicitly asks you to.
+1. 确保已用尽所有可能的方式查找现有可用工具，但没有一个匹配请求意图。
+2. 将用户请求与上面的可发现工具列表进行匹配。对于*可发现工具*（如插件安装建议）应用更严格的明确且无歧义规则；对于*缺失工具*（如连接器安装建议）继续使用正常的清晰匹配标准。
+3. 如果某个工具明显匹配，调用 `tool_suggest`，参数如下：
+   - `tool_type`：`connector` 或 `plugin`
+   - `action_type`：`install` 或 `enable`
+   - `tool_id`：来自上面可发现工具列表的确切 ID
+   - `suggest_reason`：面向用户的一行简洁原因，说明此工具如何帮助当前请求
+4. 建议流程完成后：
+   - 如果用户完成了安装或启用流程，则通过重新搜索或使用新可用的工具继续
+   - 如果用户未完成，则在不使用该工具的情况下继续，并且除非用户明确要求，否则不再建议该工具。
