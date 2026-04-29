@@ -6,6 +6,7 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ResponseItem;
 use serde_json::Value;
 use serde_json::json;
+use std::collections::HashSet;
 
 /// Builds a Chat Completions API request body from a Responses API request.
 ///
@@ -120,11 +121,10 @@ pub fn build_chat_request(
                 {
                     last["tool_calls"].as_array_mut().unwrap().push(tool_call);
                     // Attach turn-level reasoning if not already present.
-                    if last.get("reasoning_content").is_none() {
-                        if let Some(rc) = turn_reasoning_content.clone() {
+                    if last.get("reasoning_content").is_none()
+                        && let Some(rc) = turn_reasoning_content.clone() {
                             last["reasoning_content"] = json!(rc);
                         }
-                    }
                 } else if let Some(index) = last_assistant_message_index
                     && let Some(last) = messages.get_mut(index)
                     && last.get("tool_calls").is_none()
@@ -182,11 +182,10 @@ pub fn build_chat_request(
                 {
                     last["tool_calls"].as_array_mut().unwrap().push(tool_call);
                     // Attach turn-level reasoning if not already present.
-                    if last.get("reasoning_content").is_none() {
-                        if let Some(rc) = turn_reasoning_content.clone() {
+                    if last.get("reasoning_content").is_none()
+                        && let Some(rc) = turn_reasoning_content.clone() {
                             last["reasoning_content"] = json!(rc);
                         }
-                    }
                 } else if let Some(index) = last_assistant_message_index
                     && let Some(last) = messages.get_mut(index)
                     && last.get("tool_calls").is_none()
@@ -259,72 +258,91 @@ pub fn build_chat_request(
         }
     }
 
-    // Defensive: strip any assistant message that has tool_calls but no
+    // Defensive: rewrite any assistant message that has tool_calls but no
     // reasoning_content when thinking mode is active. DeepSeek requires
     // reasoning_content on every tool-call turn in all subsequent requests.
     if reasoning_effort.is_some() {
-        let mut stripped_count = 0usize;
-        let mut stripped_call_ids: Vec<String> = Vec::new();
+        let mut rewritten_count = 0usize;
+        let mut rewritten_call_ids = HashSet::new();
         for (i, msg) in messages.iter_mut().enumerate() {
             if msg.get("role").and_then(Value::as_str) == Some("assistant")
                 && msg.get("tool_calls").is_some()
                 && msg.get("reasoning_content").is_none()
             {
-                // Collect tool_call_ids before removing them so we can
-                // also drop the corresponding orphaned tool messages.
-                if let Some(tc_array) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
-                    for tc in tc_array {
-                        if let Some(id) = tc.get("id").and_then(Value::as_str) {
-                            stripped_call_ids.push(id.to_string());
+                let mut transcript_parts = Vec::new();
+                if let Some(content) = msg.get("content").and_then(Value::as_str)
+                    && !content.is_empty()
+                {
+                    transcript_parts.push(content.to_string());
+                }
+
+                let tool_count =
+                    if let Some(tc_array) = msg.get("tool_calls").and_then(|tc| tc.as_array()) {
+                        for tc in tc_array {
+                            let call_id = tc.get("id").and_then(Value::as_str);
+                            if let Some(id) = call_id {
+                                rewritten_call_ids.insert(id.to_string());
+                            }
+                            let name = tc
+                                .get("function")
+                                .and_then(|function| function.get("name"))
+                                .and_then(Value::as_str)
+                                .unwrap_or("tool");
+                            let arguments = tc
+                                .get("function")
+                                .and_then(|function| function.get("arguments"))
+                                .and_then(Value::as_str)
+                                .unwrap_or_default();
+                            transcript_parts.push(replayed_tool_call_transcript(
+                                name,
+                                call_id,
+                                "arguments",
+                                arguments,
+                            ));
                         }
-                    }
-                }
-                // Remove tool_calls from this message to avoid a 400 error,
-                // and set content to a placeholder if it was null.
-                let tool_count = msg
-                    .get("tool_calls")
-                    .and_then(|tc| tc.as_array())
-                    .map_or(0, |arr| arr.len());
+                        tc_array.len()
+                    } else {
+                        0
+                    };
+
                 msg.as_object_mut().unwrap().remove("tool_calls");
-                // After removing tool_calls, ensure content is set.
-                // The message may have been `"content": null` (JSON null)
-                // which serde_json represents as Value::Null (not None).
-                if msg.get("content").is_none_or(|v| v.is_null()) {
-                    msg["content"] = json!("");
-                }
-                stripped_count += 1;
+                msg["content"] = json!(transcript_parts.join("\n"));
+                rewritten_count += 1;
                 let msg = format!(
-                    "[reasoning_content] build_chat_request 防御性移除: 消息 #{i} 含 {tool_count} 个 tool_call 但无 reasoning_content"
+                    "[reasoning_content] build_chat_request 防御性改写: 消息 #{i} 含 {tool_count} 个 tool_call 但无 reasoning_content，已转为 assistant transcript"
                 );
                 diagnostics.push(msg);
             }
         }
-        if stripped_count > 0 {
+
+        let mut rewritten_output_count = 0usize;
+        for msg in &mut messages {
+            if msg.get("role").and_then(Value::as_str) == Some("tool")
+                && let Some(tool_call_id) = msg.get("tool_call_id").and_then(Value::as_str)
+                && rewritten_call_ids.contains(tool_call_id)
+            {
+                let content = msg
+                    .get("content")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                *msg = json!({
+                    "role": "assistant",
+                    "content": replayed_tool_output_transcript(tool_call_id, None, &content),
+                });
+                rewritten_output_count += 1;
+            }
+        }
+
+        if rewritten_count > 0 {
             let msg = format!(
-                "[reasoning_content] build_chat_request: 共移除 {stripped_count} 条无 reasoning 的 tool_call 消息"
+                "[reasoning_content] build_chat_request: 共改写 {rewritten_count} 条无 reasoning 的 tool_call 消息"
             );
             diagnostics.push(msg);
         }
-        // Remove tool output messages that reference stripped call_ids to
-        // avoid orphaned tool_call_id references that may confuse the API.
-        let orphan_count = if !stripped_call_ids.is_empty() {
-            let before = messages.len();
-            messages.retain(|msg| {
-                if msg.get("role").and_then(Value::as_str) != Some("tool") {
-                    return true;
-                }
-                let Some(tc_id) = msg.get("tool_call_id").and_then(Value::as_str) else {
-                    return true;
-                };
-                !stripped_call_ids.iter().any(|id| id == tc_id)
-            });
-            before.saturating_sub(messages.len())
-        } else {
-            0
-        };
-        if orphan_count > 0 {
+        if rewritten_output_count > 0 {
             let msg = format!(
-                "[reasoning_content] build_chat_request: 额外移除 {orphan_count} 条孤儿 tool output 消息"
+                "[reasoning_content] build_chat_request: 额外改写 {rewritten_output_count} 条关联 tool output"
             );
             diagnostics.push(msg);
         }
@@ -387,11 +405,13 @@ fn sanitize_model_turn_segment(
     segment: &[ResponseItem],
     diagnostics: &mut Vec<String>,
 ) -> Vec<ResponseItem> {
+    let mut sanitized = Vec::new();
     let mut saw_reasoning_content = false;
-    let mut saw_tool_call_without_reasoning = false;
-    let mut last_tool_activity_index = None;
+    let mut rewritten_tool_calls = 0usize;
+    let mut rewritten_tool_outputs = 0usize;
+    let mut rewritten_call_ids = HashSet::new();
 
-    for (index, item) in segment.iter().enumerate() {
+    for item in segment {
         match item {
             ResponseItem::Reasoning { content, .. } => {
                 if content.as_ref().is_some_and(|items| {
@@ -402,78 +422,224 @@ fn sanitize_model_turn_segment(
                 }) {
                     saw_reasoning_content = true;
                 }
+                sanitized.push(item.clone());
             }
-            ResponseItem::FunctionCall { .. }
-            | ResponseItem::CustomToolCall { .. }
-            | ResponseItem::LocalShellCall { .. } => {
-                last_tool_activity_index = Some(index);
-                if !saw_reasoning_content {
-                    saw_tool_call_without_reasoning = true;
+            ResponseItem::FunctionCall {
+                name,
+                arguments,
+                call_id,
+                ..
+            } => {
+                if saw_reasoning_content {
+                    sanitized.push(item.clone());
+                } else {
+                    rewritten_call_ids.insert(call_id.clone());
+                    rewritten_tool_calls += 1;
+                    sanitized.push(assistant_transcript_message(replayed_tool_call_transcript(
+                        name,
+                        Some(call_id),
+                        "arguments",
+                        arguments,
+                    )));
                 }
             }
-            ResponseItem::FunctionCallOutput { .. }
-            | ResponseItem::CustomToolCallOutput { .. }
-            | ResponseItem::ToolSearchOutput { .. } => {
-                last_tool_activity_index = Some(index);
+            ResponseItem::CustomToolCall {
+                call_id,
+                name,
+                input,
+                ..
+            } => {
+                if saw_reasoning_content {
+                    sanitized.push(item.clone());
+                } else {
+                    rewritten_call_ids.insert(call_id.clone());
+                    rewritten_tool_calls += 1;
+                    sanitized.push(assistant_transcript_message(replayed_tool_call_transcript(
+                        name,
+                        Some(call_id),
+                        "input",
+                        input,
+                    )));
+                }
+            }
+            ResponseItem::LocalShellCall {
+                call_id, action, ..
+            } => {
+                if saw_reasoning_content {
+                    sanitized.push(item.clone());
+                } else {
+                    use codex_protocol::models::LocalShellAction;
+                    let command = match action {
+                        LocalShellAction::Exec(exec) => &exec.command,
+                    };
+                    let arguments = json!({
+                        "command": command,
+                    })
+                    .to_string();
+                    if let Some(call_id) = call_id {
+                        rewritten_call_ids.insert(call_id.clone());
+                    }
+                    rewritten_tool_calls += 1;
+                    sanitized.push(assistant_transcript_message(replayed_tool_call_transcript(
+                        "shell",
+                        call_id.as_deref(),
+                        "arguments",
+                        &arguments,
+                    )));
+                }
+            }
+            ResponseItem::FunctionCallOutput { call_id, output } => {
+                if rewritten_call_ids.contains(call_id) {
+                    rewritten_tool_outputs += 1;
+                    sanitized.push(assistant_transcript_message(
+                        replayed_tool_output_transcript(call_id, None, &output.to_string()),
+                    ));
+                } else {
+                    sanitized.push(item.clone());
+                }
+                saw_reasoning_content = false;
+            }
+            ResponseItem::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+            } => {
+                if rewritten_call_ids.contains(call_id) {
+                    rewritten_tool_outputs += 1;
+                    sanitized.push(assistant_transcript_message(
+                        replayed_tool_output_transcript(
+                            call_id,
+                            name.as_deref(),
+                            &output.to_string(),
+                        ),
+                    ));
+                } else {
+                    sanitized.push(item.clone());
+                }
+                saw_reasoning_content = false;
+            }
+            ResponseItem::ToolSearchOutput {
+                call_id,
+                status,
+                execution,
+                tools,
+            } => {
+                if let Some(call_id) = call_id
+                    && rewritten_call_ids.contains(call_id)
+                {
+                    rewritten_tool_outputs += 1;
+                    let output = format!(
+                        "status: {status}\nexecution: {execution}\ntools:\n{}",
+                        serde_json::to_string(tools).unwrap_or_default()
+                    );
+                    sanitized.push(assistant_transcript_message(
+                        replayed_tool_output_transcript(call_id, Some("tool_search"), &output),
+                    ));
+                } else {
+                    sanitized.push(item.clone());
+                }
                 // After tool outputs, a new tool_call group in the turn
                 // needs its own reasoning.  Reset so continuation tool
                 // calls without reasoning are detected for self-healing.
                 saw_reasoning_content = false;
             }
-            _ => {}
+            _ => sanitized.push(item.clone()),
         }
     }
 
-    if !saw_tool_call_without_reasoning {
-        return segment.to_vec();
-    }
-
-    let msg = "[reasoning_content] sanitize_model_turn_segment: 历史中存在缺少 reasoning_content 的 tool_call";
-    diagnostics.push(msg.to_string());
-
-    let Some(last_tool_activity_index) = last_tool_activity_index else {
-        return segment.to_vec();
-    };
-
-    let trailing_assistant_messages: Vec<ResponseItem> = segment[last_tool_activity_index + 1..]
-        .iter()
-        .filter(|item| matches!(item, ResponseItem::Message { role, .. } if role == "assistant"))
-        .cloned()
-        .collect();
-
-    if trailing_assistant_messages.is_empty() {
-        // No trailing assistant messages to keep as context for this turn.
-        // Strip tool calls and outputs that lack reasoning_content to avoid
-        // DeepSeek 400: "reasoning_content must be passed back to the API".
-        let msg = "[reasoning_content] sanitize_model_turn_segment: 无 trailing assistant message，过滤掉 tool_calls 及 outputs";
-        diagnostics.push(msg.to_string());
-        segment
-            .iter()
-            .filter(|item| {
-                !matches!(
-                    item,
-                    ResponseItem::FunctionCall { .. }
-                        | ResponseItem::CustomToolCall { .. }
-                        | ResponseItem::LocalShellCall { .. }
-                        | ResponseItem::FunctionCallOutput { .. }
-                        | ResponseItem::CustomToolCallOutput { .. }
-                        | ResponseItem::ToolSearchOutput { .. }
-                )
-            })
-            .cloned()
-            .collect()
-    } else {
+    if rewritten_tool_calls > 0 || rewritten_tool_outputs > 0 {
         let msg = format!(
-            "[reasoning_content] sanitize_model_turn_segment: 有 {} 条 trailing assistant message，折叠为该消息",
-            trailing_assistant_messages.len()
+            "[reasoning_content] sanitize_model_turn_segment: 将 {rewritten_tool_calls} 个无 reasoning 的 tool_call 与 {rewritten_tool_outputs} 个关联 output 改写为 assistant transcript"
         );
         diagnostics.push(msg);
-        trailing_assistant_messages
     }
+
+    sanitized
 }
 
 fn is_non_assistant_message(item: &ResponseItem) -> bool {
     matches!(item, ResponseItem::Message { role, .. } if role != "assistant")
+}
+
+fn assistant_transcript_message(text: String) -> ResponseItem {
+    ResponseItem::Message {
+        id: None,
+        role: "assistant".to_string(),
+        content: vec![ContentItem::OutputText { text }],
+        end_turn: Some(true),
+        phase: None,
+    }
+}
+
+fn replayed_tool_call_transcript(
+    name: &str,
+    call_id: Option<&str>,
+    payload_label: &str,
+    payload: &str,
+) -> String {
+    let call_id = call_id.unwrap_or_default();
+    format!(
+        "<replayed_tool_call>\nname: {name}\ncall_id: {call_id}\n{payload_label}:\n{payload}\n</replayed_tool_call>"
+    )
+}
+
+fn replayed_tool_output_transcript(call_id: &str, name: Option<&str>, output: &str) -> String {
+    let tool_name = name
+        .map(|name| format!("name: {name}\n"))
+        .unwrap_or_default();
+    format!(
+        "<replayed_tool_output>\n{tool_name}call_id: {call_id}\noutput:\n{output}\n</replayed_tool_output>"
+    )
+}
+
+fn content_items_to_text(items: &[ContentItem]) -> String {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            ContentItem::InputText { text } => Some(text.as_str()),
+            ContentItem::OutputText { text } => Some(text.as_str()),
+            ContentItem::InputImage { .. } => None,
+        })
+        .collect::<Vec<_>>()
+        .join("")
+}
+
+fn function_output_to_string(output: &FunctionCallOutputPayload) -> String {
+    // FunctionCallOutputPayload serializes to either a string or structured content.
+    serde_json::to_string(output).unwrap_or_default()
+}
+
+/// Converts Responses API tool definitions to Chat Completions format.
+///
+/// Responses API tools look like: `{"type": "function", "name": "...", "parameters": {...}, "description": "..."}`
+/// Chat Completions tools look like: `{"type": "function", "function": {"name": "...", "parameters": {...}, "description": "..."}}`
+fn convert_tools(tools: &[Value]) -> Vec<Value> {
+    tools
+        .iter()
+        .filter_map(|tool| {
+            let tool_type = tool.get("type")?.as_str()?;
+            if tool_type == "function" {
+                let name = tool.get("name")?;
+                let mut func = json!({ "name": name });
+                if let Some(desc) = tool.get("description") {
+                    func["description"] = desc.clone();
+                }
+                if let Some(params) = tool.get("parameters") {
+                    func["parameters"] = params.clone();
+                }
+                if let Some(strict) = tool.get("strict") {
+                    func["strict"] = strict.clone();
+                }
+                Some(json!({
+                    "type": "function",
+                    "function": func,
+                }))
+            } else {
+                // Skip non-function tools (web_search, etc.) — not supported by Chat Completions.
+                None
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -627,7 +793,7 @@ mod tests {
     }
 
     #[test]
-    fn collapses_completed_tool_turn_without_reasoning_content() {
+    fn preserves_completed_tool_turn_without_reasoning_content_as_transcript() {
         let body = build_chat_request(
             "deepseek-v4-pro",
             "",
@@ -664,7 +830,21 @@ mod tests {
                 },
                 {
                     "role": "assistant",
-                    "content": "Done.",
+                    "content": concat!(
+                        "Let me check.\n",
+                        "<replayed_tool_call>\n",
+                        "name: shell\n",
+                        "call_id: call_1\n",
+                        "arguments:\n",
+                        "{\"command\":\"pwd\"}\n",
+                        "</replayed_tool_call>\n",
+                        "<replayed_tool_output>\n",
+                        "call_id: call_1\n",
+                        "output:\n",
+                        "ok\n",
+                        "</replayed_tool_output>\n",
+                        "Done."
+                    ),
                 },
                 {
                     "role": "user",
@@ -860,17 +1040,13 @@ mod tests {
     }
 
     #[test]
-    fn strips_tool_calls_without_reasoning_when_no_trailing_assistant() {
-        // When old history has tool calls without reasoning_content
-        // AND no trailing assistant message, tool calls must be stripped
-        // to avoid DeepSeek 400: "reasoning_content must be passed back".
+    fn preserves_tool_calls_without_reasoning_as_transcript_without_trailing_assistant() {
         let body = build_chat_request(
             "deepseek-v4-pro",
             "",
             &[
                 user_message("question"),
                 assistant_message("Let me check."),
-                // No reasoning item here – simulates old history before the fix.
                 ResponseItem::FunctionCall {
                     id: None,
                     name: "shell".to_string(),
@@ -892,8 +1068,6 @@ mod tests {
             &mut Vec::new(),
         );
 
-        // Tool calls without reasoning_content are stripped;
-        // only the assistant text and user messages remain.
         assert_eq!(
             body["messages"],
             json!([
@@ -903,7 +1077,20 @@ mod tests {
                 },
                 {
                     "role": "assistant",
-                    "content": "Let me check.",
+                    "content": concat!(
+                        "Let me check.\n",
+                        "<replayed_tool_call>\n",
+                        "name: shell\n",
+                        "call_id: call_1\n",
+                        "arguments:\n",
+                        "{\"command\":\"ls\"}\n",
+                        "</replayed_tool_call>\n",
+                        "<replayed_tool_output>\n",
+                        "call_id: call_1\n",
+                        "output:\n",
+                        "file.txt\n",
+                        "</replayed_tool_output>"
+                    ),
                 },
                 {
                     "role": "user",
@@ -912,54 +1099,4 @@ mod tests {
             ])
         );
     }
-}
-
-fn content_items_to_text(items: &[ContentItem]) -> String {
-    items
-        .iter()
-        .filter_map(|item| match item {
-            ContentItem::InputText { text } => Some(text.as_str()),
-            ContentItem::OutputText { text } => Some(text.as_str()),
-            ContentItem::InputImage { .. } => None,
-        })
-        .collect::<Vec<_>>()
-        .join("")
-}
-
-fn function_output_to_string(output: &FunctionCallOutputPayload) -> String {
-    // FunctionCallOutputPayload serializes to either a string or structured content.
-    serde_json::to_string(output).unwrap_or_default()
-}
-
-/// Converts Responses API tool definitions to Chat Completions format.
-///
-/// Responses API tools look like: `{"type": "function", "name": "...", "parameters": {...}, "description": "..."}`
-/// Chat Completions tools look like: `{"type": "function", "function": {"name": "...", "parameters": {...}, "description": "..."}}`
-fn convert_tools(tools: &[Value]) -> Vec<Value> {
-    tools
-        .iter()
-        .filter_map(|tool| {
-            let tool_type = tool.get("type")?.as_str()?;
-            if tool_type == "function" {
-                let name = tool.get("name")?;
-                let mut func = json!({ "name": name });
-                if let Some(desc) = tool.get("description") {
-                    func["description"] = desc.clone();
-                }
-                if let Some(params) = tool.get("parameters") {
-                    func["parameters"] = params.clone();
-                }
-                if let Some(strict) = tool.get("strict") {
-                    func["strict"] = strict.clone();
-                }
-                Some(json!({
-                    "type": "function",
-                    "function": func,
-                }))
-            } else {
-                // Skip non-function tools (web_search, etc.) — not supported by Chat Completions.
-                None
-            }
-        })
-        .collect()
 }

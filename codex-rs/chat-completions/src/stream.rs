@@ -73,11 +73,10 @@ pub async fn stream_chat_completions<A: AuthProvider>(
     );
 
     // Add auth headers.
-    if let Some(token) = auth.bearer_token() {
-        if let Ok(val) = http::HeaderValue::from_str(&format!("Bearer {token}")) {
+    if let Some(token) = auth.bearer_token()
+        && let Ok(val) = http::HeaderValue::from_str(&format!("Bearer {token}")) {
             headers.insert(http::header::AUTHORIZATION, val);
         }
-    }
 
     let client = reqwest::Client::new();
     let response = client
@@ -147,11 +146,10 @@ fn is_minimax_provider(name: &str, base_url: &str) -> bool {
 fn reqwest_headers_from_http(headers: http::HeaderMap) -> reqwest::header::HeaderMap {
     let mut out = reqwest::header::HeaderMap::new();
     for (name, value) in headers.iter() {
-        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes()) {
-            if let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
+        if let Ok(n) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
+            && let Ok(v) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
                 out.insert(n, v);
             }
-        }
     }
     out
 }
@@ -276,18 +274,17 @@ async fn process_chat_sse(
                     };
 
                     // Text content delta.
-                    if let Some(content) = &delta.content {
-                        if !content.is_empty() {
+                    if let Some(content) = &delta.content
+                        && !content.is_empty() {
                             accumulated_text.push_str(content);
                             let _ = tx
                                 .send(Ok(ResponseEvent::OutputTextDelta(content.clone())))
                                 .await;
                         }
-                    }
 
                     // Reasoning content (DeepSeek style).
-                    if let Some(reasoning) = &delta.reasoning_content {
-                        if !reasoning.is_empty() {
+                    if let Some(reasoning) = &delta.reasoning_content
+                        && !reasoning.is_empty() {
                             accumulated_reasoning.push_str(reasoning);
                             let _ = tx
                                 .send(Ok(ResponseEvent::ReasoningContentDelta {
@@ -296,7 +293,6 @@ async fn process_chat_sse(
                                 }))
                                 .await;
                         }
-                    }
 
                     // Tool call deltas.
                     if let Some(tool_calls) = &delta.tool_calls {
