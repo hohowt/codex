@@ -497,7 +497,11 @@ fn sanitize_model_turn_segment(
                 } else {
                     sanitized.push(item.clone());
                 }
-                saw_reasoning_content = false;
+                // Do NOT reset saw_reasoning_content here — main conversion loop
+                // keeps turn_reasoning_content for the entire turn so subsequent
+                // tool calls reuse it. Resetting would cause the next FunctionCall
+                // to be rewritten as text, losing reasoning_content that DeepSeek
+                // thinking mode requires.
             }
             ResponseItem::CustomToolCallOutput {
                 call_id,
@@ -516,7 +520,7 @@ fn sanitize_model_turn_segment(
                 } else {
                     sanitized.push(item.clone());
                 }
-                saw_reasoning_content = false;
+                // Do NOT reset saw_reasoning_content here — same reasoning as above.
             }
             ResponseItem::ToolSearchOutput {
                 call_id,
