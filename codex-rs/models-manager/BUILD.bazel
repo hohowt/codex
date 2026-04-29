@@ -4,7 +4,6 @@ codex_rust_crate(
     name = "models-manager",
     crate_name = "codex_models_manager",
     compile_data = [
-        "deepseek_prompt.md",
         "models.json",
         "prompt.md",
     ],

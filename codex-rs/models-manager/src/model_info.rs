@@ -17,7 +17,6 @@ use codex_utils_output_truncation::approx_bytes_for_tokens;
 use tracing::warn;
 
 pub const BASE_INSTRUCTIONS: &str = include_str!("../prompt.md");
-const DEEPSEEK_BASE_INSTRUCTIONS: &str = include_str!("../deepseek_prompt.md");
 const DEFAULT_PERSONALITY_HEADER: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
 const LOCAL_FRIENDLY_TEMPLATE: &str =
     "You optimize for team morale and being a supportive teammate as much as code quality.";
@@ -173,7 +172,7 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             additional_speed_tiers: Vec::new(),
             availability_nux: None,
             upgrade: None,
-            base_instructions: DEEPSEEK_BASE_INSTRUCTIONS.to_string(),
+            base_instructions: BASE_INSTRUCTIONS.to_string(),
             model_messages: None,
             supports_reasoning_summaries: true,
             default_reasoning_summary: ReasoningSummary::Auto,
@@ -220,7 +219,7 @@ fn deepseek_v4_models() -> Vec<ModelInfo> {
             additional_speed_tiers: Vec::new(),
             availability_nux: None,
             upgrade: None,
-            base_instructions: DEEPSEEK_BASE_INSTRUCTIONS.to_string(),
+            base_instructions: BASE_INSTRUCTIONS.to_string(),
             model_messages: None,
             supports_reasoning_summaries: true,
             default_reasoning_summary: ReasoningSummary::Auto,

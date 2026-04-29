@@ -62,6 +62,6 @@ fn deepseek_builtin_models_default_to_no_thinking() {
     assert!(
         models
             .iter()
-            .all(|model| model.base_instructions.contains("DeepSeek V4"))
+            .all(|model| model.base_instructions == BASE_INSTRUCTIONS)
     );
 }
