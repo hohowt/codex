@@ -639,7 +639,7 @@ fn start_realtime_webrtc_offer_task(app_event_tx: AppEventSender) {
                     handle: started.handle,
                 })
             }
-            Err(err) => Err(err.to_string()),
+            Err(err) => Err(err),
         };
         app_event_tx.send(AppEvent::RealtimeWebrtcOfferCreated { result });
     });
